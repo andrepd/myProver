@@ -8,6 +8,7 @@ type 'a atom =
 type 'a formula =
 	| Val of bool
 	| Atom of 'a atom
+  | Not of 'a formula (* Faltava *)
 	| And of 'a formula * 'a formula
 	| Or  of 'a formula * 'a formula
 	| Imp of 'a formula * 'a formula

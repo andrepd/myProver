@@ -39,7 +39,6 @@ let rec reduce (env: 'a subst) : 'a subst =
 (* let mgu_list = reduce % unify Map.empty *)
 let mgu_list x = 
   reduce @@ unify Map.empty x |> map_to_func
-  (* with Failure _ -> fun x -> Var x *)
 
 (* let mgu = mgu_list % List.singleton *)
 let mgu x = mgu_list @@ List.singleton x

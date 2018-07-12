@@ -24,12 +24,9 @@ let comma = char ','
 
 (* Main parsers *)
 
-(* let rec expr() : string term t = *)
 let parser_term : string term t =
   fix (fun expr ->
     ident >>= (fun x -> 
-      (* try (parens expr *> (return @@ Func (x, sep_by comma expr))) *)
-      (* try (parens (return @@ Func (x, sep_by comma expr))) *)
       (parens (sep_by comma expr) >>= (fun terms -> return @@ Func (x, terms)))
       <|> (return @@ Var x)
     )
@@ -49,14 +46,12 @@ let parser_lit : string literal t =
   )
 
 let parser_clause : string clause t =
-  (* s |> String.split_on_char ',' |> List.map parser_lit *)
   sep_by (eat_spaces *> char ',' <* eat_spaces) parser_lit
 
 let parser_clauseset : string clauseset t =
   sep_by (eat_spaces *> char '\n' <* eat_spaces) parser_clause
 
 let parse s = 
-  (* match parse_string parser_lit s with *)
   match parse_string parser_clauseset s with
   | Ok res -> List.filter (neg List.is_empty) res
   | Error msg -> failwith msg

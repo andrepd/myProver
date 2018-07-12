@@ -4,6 +4,13 @@ open Types
 open Unification
 open Util
 
+let dbg_flag = true
+let dbg x = if dbg_flag then print_endline (Lazy.force x)
+
+let bold x = "\o033[1m" ^ x ^ "\o033[0m"
+
+(* ---- *)
+
 let prop_abstraction (elem: 'a) (x: 'a clauseset) = 
   subst_clause_set (fun x -> Var elem) x
 
@@ -11,9 +18,9 @@ let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : pmodel option =
   x |> prop_abstraction elem |> to_pcnf |> call_sat_solver
 
 let encode_clauseset (x: string clauseset) : int clauseset =
-  let table = ref @@ Map.empty in
+  let table = ref Map.empty in
   let num = ref 1 in
-  let table_var = ref @@ Map.empty in
+  let table_var = ref Map.empty in
   let num_var = ref (-1) in
 
   let get_num (s: string) : int =
@@ -98,27 +105,6 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
     done;
     !ret
 
-    (* let rec loop_2nd_clause l ls =
-      match ls with
-      | [] -> None
-      | x::xs ->
-
-
-    let rec loop_1st_clause l = 
-      match l with
-      | [] -> None
-      | x::xs ->
-        loop_2nd clause x xs
-    in
-    loop_1st_clause x *)
-
-(*   let attempt a b =
-    try
-      let subst = mgu (a,b) in
-
-    with
-    | Failure _ -> None *)
-
   in
 
   let try_unify (a,i,b,j) =
@@ -127,8 +113,8 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
     let {sign=asign; lit=Pred (aname, aargs)} = a in
     let {sign=bsign; lit=Pred (bname, bargs)} = b in
 
-    print_endline @@ string_of_literal a;
-    print_endline @@ string_of_literal b;
+    dbg @@ lazy (string_of_literal a);
+    dbg @@ lazy (string_of_literal b);
     print_newline ();
 
     if asign == bsign || aname <> bname then
@@ -161,6 +147,9 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
     (* let Some (i,j,s) = LazyList.find (function Some _ -> true | None -> false) @@ LazyList.map try_unify (pairs x) in *)
     let foo = 
       pairs x
+      |> LazyList.to_list
+      |> List.shuffle
+      |> LazyList.of_list
       |> LazyList.map (fun (a,i,b,j) -> (a,i,subst_literal rename b,j))
       |> LazyList.map try_unify
       |> LazyList.find (function Some _ -> true | None -> false) 
@@ -185,12 +174,15 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
 
 let rec main_loop (l: 'a clauseset) : bool = 
   match check_prop_satisfiability "X" l with
-  | Some _ ->
+  | Some _ -> (
     let new_clauses = inst_gen l in
     (* case new_clauses of *)
     match new_clauses with
-    | Some x -> (print_endline "new"; main_loop (l @ x))
-    | None -> true
+    | Some x -> 
+      (print_endline "new"; main_loop (l @ x))
+    | None -> 
+      true
+  )
   | None ->
     false
 
@@ -205,30 +197,33 @@ let test () =
   print_string @@ string_of_clauseset test_formula *)
 
   let input = IO.read_all stdin in
+
+  print_endline @@ bold "Original formula:";
   let test_formula = Parser.parse input in
   print_endline @@ string_of_clauseset test_formula;
   print_newline ();
   
+  print_endline @@ bold "Encoded formula:";
   let encoded_formula = encode_clauseset test_formula in
   print_endline @@ string_of_int_clauseset encoded_formula;
   print_newline ();
 
+  print_endline @@ bold "Propositional abstraction:";
   let prop_formula = prop_abstraction 0 encoded_formula in
   print_endline @@ string_of_int_clauseset @@ prop_formula;
   print_newline ();
   
+  print_endline @@ bold "pcnf text:";
   print_string @@ to_pcnf prop_formula;
   print_newline ();
   
+  print_endline @@ bold "Prop satisfiability of above:";
   (* let sat = check_prop_satisfiability 0 prop_formula in *)
   let sat = check_prop_satisfiability 0 encoded_formula in
   print_endline @@ (match sat with Some _ -> "SAT" | None -> "UNSAT");
+  print_newline ();
 
-  (*let pairs = inst_gen test_formula in
-  (* LazyList.iter (fun (x,y) -> print_endline @@ string_of_int_literal x ^ " / " ^ string_of_int_literal y) pairs;  *)
-  LazyList.iter (fun (x,y) -> print_endline @@ string_of_literal x ^ " / " ^ string_of_literal y) pairs;*)
-
-  print_endline "Starting instance generation";
+  (* print_endline "Starting instance generation";
   let new_instances = inst_gen test_formula in
   print_endline "Done";
 
@@ -238,7 +233,7 @@ let test () =
   | None ->
     print_endline "None found"
   end; (* SEM O END PENSA QUE O RESTO TÁ DEBAIXO DO NONE *)
-  print_newline ();
+  print_newline (); *)
 
   let sat = main_loop test_formula in
   print_endline @@ if sat then "FOL SAT" else "FOL UNSAT";
