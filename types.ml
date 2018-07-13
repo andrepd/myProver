@@ -21,6 +21,7 @@ type 'a clause = 'a literal list
 type 'a clauseset = 'a clause list
 
 type pmodel = bool array
+type passignment = bool list list
 
 
 

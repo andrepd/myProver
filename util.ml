@@ -2,6 +2,44 @@ open Batteries
 
 open Types
 
+let ($) = (@@)
+
+let (|=>) a b x = 
+  if x = a then b else Var x
+
+let (|->) a b f x = 
+  if x = a then b else f x
+
+(* --- *)
+
+let rec variant x l =
+  if List.mem x l then 
+    variant (x^"'") l
+  else
+    x 
+
+let rec free_vars (f: 'a formula) = 
+  let rec fv_term t =
+    match t with
+    | Var x -> [x]
+    | Func (_, args) -> List.concat $ List.map fv_term args
+  in
+  let rec fv_formula f =
+    match f with
+    | Val _ -> []
+    | Atom (Pred (_, args)) -> List.concat $ List.map fv_term args
+    | Not x -> fv_formula x
+    | And (x,y) -> fv_formula x @ fv_formula y
+    | Or  (x,y) -> fv_formula x @ fv_formula y
+    | Imp (x,y) -> fv_formula x @ fv_formula y
+    | Iff (x,y) -> fv_formula x @ fv_formula y
+    | Forall (x, p) -> List.remove (fv_formula p) x
+    | Exists (x, p) -> List.remove (fv_formula p) x
+  in
+  fv_formula f |> List.sort_unique compare
+
+(* --- *)
+
 let rec subst_term (s: 'a -> 'a term) (f: 'a term) =
   match f with
   | Var x -> s x
@@ -19,31 +57,76 @@ let subst_clause (s: 'a -> 'a term) (f: 'a clause) =
 let subst_clause_set (s: 'a -> 'a term) (f: 'a clauseset) =
   List.map (subst_clause s) f
 
-let to_pcnf (x: 'a clauseset) : string =
+let rec subst_formula (s: 'a -> 'a term) (f: 'a formula) =
+  match f with 
+  | Val _ -> f
+  | Atom x -> Atom (subst_atom s x)
+  | Not x -> Not (subst_formula s x)
+  | And (x,y) -> And (subst_formula s x, subst_formula s y)
+  | Or  (x,y) -> Or  (subst_formula s x, subst_formula s y)
+  | Imp (x,y) -> Imp (subst_formula s x, subst_formula s y)
+  | Iff (x,y) -> Iff (subst_formula s x, subst_formula s y)
+  | Forall (x, p) -> (
+    if s x <> Var x then
+      failwith "subst_formula: cannot replace bound var"
+    else (
+      let x' = variant x (free_vars p) in
+      Forall (x', subst_formula ((x |-> Var x') s) p)
+    )
+  )
+  | Exists (x, p) -> (
+    if s x <> Var x then
+      failwith "subst_formula: cannot replace bound var"
+    else (
+      let x' = variant x (free_vars p) in
+      Forall (x', subst_formula ((x |-> Var x') s) p)
+    )
+  )
+
+
+
+(* let prop_numbering (x: 'a clauseset) : int LazyList.t LazyList.t * (int*int) = *)
+let prop_numbering (x: 'a clauseset) : int List.t List.t * (int*int) =
   let store = ref @@ Map.empty in
   let num = ref 1 in
+  
+  let clauses = 
+    List.map (fun clause ->
+      List.map (fun {sign;lit} -> 
+        let n =
+          try
+            Map.find lit !store
+          with
+            Not_found -> (
+              store := Map.add lit !num !store;
+              incr num;
+              !num-1
+            )
+        in
+        if sign then
+          n
+        else
+          -n
+      ) clause
+    ) x
+  in
+  (clauses, (!num-1, List.length clauses))
+
+(* let numbering_to_pcnf (x: int List.t List.t * (int*int)) : string = *)
+let numbering_to_pcnf ((clauses,(nvars,nclauses)): int List.t List.t * (int*int)) : string =
   let body = ref "" in
   List.iter (fun clause ->
-    List.iter (fun {sign;lit} -> 
-      let n =
-        try
-          Map.find lit !store
-        with
-          Not_found -> (
-            store := Map.add lit !num !store;
-            incr num;
-            !num-1
-          )
-      in
-      if sign then
-        body := !body ^ Int.to_string n ^ " "
-      else
-        body := !body ^ "-" ^ Int.to_string n ^ " "
+    List.iter (fun n -> 
+      body := !body ^ Int.to_string n ^ " "
     ) clause;
     body := !body ^ "0\n"
-  ) x;
-  let header = "p cnf " ^ Int.to_string (!num-1) ^ " " ^ Int.to_string (List.length x) ^ "\n" in
+  ) clauses;
+  let header = "p cnf " ^ Int.to_string nvars ^ " " ^ Int.to_string nclauses ^ "\n" in
   header ^ !body
+  
+
+let to_pcnf (x: 'a clauseset) : string =
+  x |> prop_numbering |> numbering_to_pcnf
 
 let call_sat_solver (str: string) : pmodel option =
   (* let in_descr = Unix.descr_of_in_channel @@ IO.input_string str in

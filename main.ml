@@ -9,13 +9,28 @@ let dbg x = if dbg_flag then print_endline (Lazy.force x)
 
 let bold x = "\o033[1m" ^ x ^ "\o033[0m"
 
+let sign x = x>0
+
 (* ---- *)
 
 let prop_abstraction (elem: 'a) (x: 'a clauseset) = 
   subst_clause_set (fun x -> Var elem) x
 
-let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : pmodel option = 
-  x |> prop_abstraction elem |> to_pcnf |> call_sat_solver
+(* let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : pmodel option =  *)
+  (* x |> prop_abstraction elem |> to_pcnf |> call_sat_solver *)
+
+let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : passignment option = 
+  (* let aux model numbering =  *)
+
+  let numbering = x |> prop_abstraction elem |> prop_numbering in
+  let pcnf = numbering |> numbering_to_pcnf in
+  match call_sat_solver pcnf with
+  | Some model -> (
+    let aux = fun x -> let x' = abs(x)-1 in model.(x') = sign x in
+    let assignments = List.map (List.map aux) (fst numbering) in
+    Some assignments
+  )
+  | None -> None
 
 let encode_clauseset (x: string clauseset) : int clauseset =
   let table = ref Map.empty in
@@ -70,7 +85,7 @@ let encode_clauseset (x: string clauseset) : int clauseset =
     r
   ) x
 
-let inst_gen (x: 'a clauseset) : 'a clauseset option =
+let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option =
   (* Look for unifiable literals 
    * Find them and apply to clauses where they appear
    * If not found return None
@@ -97,7 +112,9 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
         let nb = List.length clause_b - 1 in
         for ii = 0 to na do
           for jj = 0 to nb do
-            ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j) !ret
+            (* Only selected *)
+            if List.at (List.at assignments i) ii = List.at (List.at assignments j) jj then
+              ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j) !ret
           done
         done
 
@@ -113,8 +130,10 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
     let {sign=asign; lit=Pred (aname, aargs)} = a in
     let {sign=bsign; lit=Pred (bname, bargs)} = b in
 
-    dbg @@ lazy (string_of_literal a);
-    dbg @@ lazy (string_of_literal b);
+    (* dbg @@ lazy (string_of_literal a);
+    dbg @@ lazy (string_of_literal b); *)
+    dbg @@ lazy (string_of_int_literal a);
+    dbg @@ lazy (string_of_int_literal b);
     print_newline ();
 
     if asign == bsign || aname <> bname then
@@ -138,8 +157,11 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
       | Failure _ -> None
   in
 
-  let rename = fun x -> Var (x^"'") in
-  let dename = fun x -> Var (if String.ends_with x "'" then String.rchop x else x) in
+  (* let rename = fun x -> Var (x^"'") in
+  let dename = fun x -> Var (if String.ends_with x "'" then String.rchop x else x) in *)
+
+  let rename = fun x -> Var (x-1) in
+  let dename = fun x -> Var (if x mod 2 = 0 then x-1 else x) in
 
   (* let pair = LazyList.find (function Some _ -> true | None -> False) in *)
   try
@@ -173,9 +195,9 @@ let inst_gen (x: 'a clauseset) : 'a clauseset option =
 
 
 let rec main_loop (l: 'a clauseset) : bool = 
-  match check_prop_satisfiability "X" l with
-  | Some _ -> (
-    let new_clauses = inst_gen l in
+  match check_prop_satisfiability 0 l with
+  | Some assignments -> (
+    let new_clauses = inst_gen l assignments in
     (* case new_clauses of *)
     match new_clauses with
     | Some x -> 
@@ -235,7 +257,8 @@ let test () =
   end; (* SEM O END PENSA QUE O RESTO TÁ DEBAIXO DO NONE *)
   print_newline (); *)
 
-  let sat = main_loop test_formula in
+  (* let sat = main_loop test_formula in *)
+  let sat = main_loop encoded_formula in
   print_endline @@ if sat then "FOL SAT" else "FOL UNSAT";
 
   ()

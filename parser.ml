@@ -7,7 +7,7 @@ open Types
 
 let whitespace x = 
   match x with
-  | ' ' | '\t' -> true
+  | ' ' | '\t' | '\n' -> true
   | _ -> false
 
 let eat_spaces = take_while whitespace
@@ -49,7 +49,7 @@ let parser_clause : string clause t =
   sep_by (eat_spaces *> char ',' <* eat_spaces) parser_lit
 
 let parser_clauseset : string clauseset t =
-  sep_by (eat_spaces *> char '\n' <* eat_spaces) parser_clause
+  sep_by (eat_spaces *> char ';' <* eat_spaces) parser_clause
 
 let parse s = 
   match parse_string parser_clauseset s with
