@@ -279,8 +279,12 @@ let test_cnf () =
 let test_formula () =
   let input = IO.read_all stdin in
 
+  print_endline @@ bold "Input:";
+  print_endline input;
+
   print_endline @@ bold "Original formula:";
-  let test_formula = Parser.parse_formula input in
+  (* let test_formula = Parser.parse_formula input in *)
+  let test_formula = Parser.parse_file input in
   print_endline @@ string_of_formula test_formula;
   print_newline ();
   
