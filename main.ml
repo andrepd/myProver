@@ -194,6 +194,15 @@ let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option 
 
 
 
+(* Equality *)
+
+(* let equality_axioms (l: 'a clauseset) : 'a clauseset =
+  let funcs = list_functions l in
+
+ *)
+
+(* Main loop *)
+
 let rec main_loop (l: 'a clauseset) : bool = 
   match check_prop_satisfiability 0 l with
   | Some assignments -> (
@@ -208,7 +217,9 @@ let rec main_loop (l: 'a clauseset) : bool =
   | None ->
     false
 
-let test () =
+
+
+let test_cnf () =
   (* let test_formula = 
     (* [ [{sign=true; lit=}]
     ;
@@ -221,7 +232,7 @@ let test () =
   let input = IO.read_all stdin in
 
   print_endline @@ bold "Original formula:";
-  let test_formula = Parser.parse input in
+  let test_formula = Parser.parse_cnf input in
   print_endline @@ string_of_clauseset test_formula;
   print_newline ();
   
@@ -263,4 +274,31 @@ let test () =
 
   ()
 
-let () = test()
+
+
+let test_formula () =
+  let input = IO.read_all stdin in
+
+  print_endline @@ bold "Original formula:";
+  let test_formula = Parser.parse_formula input in
+  print_endline @@ string_of_formula test_formula;
+  print_newline ();
+  
+  print_endline @@ bold "Skolemized:";
+  let skolem_formula = Clausification.skolemize (Not test_formula) in
+  print_endline @@ string_of_formula skolem_formula;
+  print_newline ();
+  
+  print_endline @@ bold "CNF:";
+  let cnf_formula = Clausification.clausify skolem_formula in
+  print_endline @@ string_of_clauseset cnf_formula;
+  print_newline ();
+  
+  let sat = main_loop @@ encode_clauseset cnf_formula in
+  print_endline @@ if sat then "FOL SAT" else "FOL UNSAT";
+
+  ()
+
+
+
+let () = test_formula()

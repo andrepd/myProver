@@ -41,7 +41,7 @@ let string_of_clause x =
   String.concat " , " (List.map string_of_literal x)
 
 let string_of_clauseset x =
-  String.concat "\n" (List.map string_of_clause x)
+  String.concat ";\n" (List.map string_of_clause x)
 
 
 
@@ -61,4 +61,19 @@ let string_of_int_clause x =
   String.concat " , " (List.map string_of_int_literal x)
 
 let string_of_int_clauseset x =
-  String.concat "\n" (List.map string_of_int_clause x)
+  String.concat ";\n" (List.map string_of_int_clause x)
+
+
+
+let rec string_of_formula x =
+  match x with
+  | Val true -> "$T"
+  | Val false -> "$F"
+  | Atom x -> string_of_atom x
+  | Not x -> "(NOT " ^ string_of_formula x ^ ")"
+  | And (x,y) -> "(AND " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
+  | Or  (x,y) -> "(OR " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
+  | Imp (x,y) -> "(IMP " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
+  | Iff (x,y) -> "(IFF " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
+  | Forall (x, p) -> "(FORALL " ^ x ^ " " ^ string_of_formula p ^ ")"
+  | Exists (x, p) -> "(EXISTS " ^ x ^ " " ^ string_of_formula p ^ ")"
