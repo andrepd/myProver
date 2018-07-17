@@ -91,6 +91,14 @@ let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option 
    * If not found return None
    *)
 
+  (
+    List.iter (fun x ->
+      List.iter (
+        function true -> print_string "T " | false -> print_string "F "
+      ) x;
+      print_newline()
+    ) assignments
+  );
   (* Terrible performance *)
   (* type 'a pair = 
     { n1: int
@@ -113,7 +121,7 @@ let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option 
         for ii = 0 to na do
           for jj = 0 to nb do
             (* Only selected *)
-            if List.at (List.at assignments i) ii = List.at (List.at assignments j) jj then
+            (* if List.at (List.at assignments i) ii = List.at (List.at assignments j) jj then *)
               ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j) !ret
           done
         done
@@ -196,10 +204,49 @@ let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option 
 
 (* Equality *)
 
-(* let equality_axioms (l: 'a clauseset) : 'a clauseset =
-  let funcs = list_functions l in
+let equality_axioms (l: 'a clauseset) : 'a clauseset =
+  let axiom ((name,arity): ('a * int)) : 'a clauseset =
+    (* if arity = 1 then
+      let a = Parser.parse_formula "x=y==(P(x)==P(y))" in 
+      Clausification.clausify @@ Clausification.skolemize @@ a
+    else
+      failwith "unimplemented" *)
+    let template a b =
+      Iff (
+        Atom (Pred ("=", [Var "x";Var "y"])),
+        Iff (
+          Atom a,
+          Atom b
+        )
+      )
+    in
+    let vars = 
+      Char.range 'a'
+      |> Enum.take arity
+      |> map (fun x -> Var (Char.escaped x))
+      |> List.of_enum
+    in
+    (* let pred = Pred (name, vars) in *)
+    let ret = ref [] in
+    for i = 0 to arity-1 do
+      let vars1 = List.modify_at i (fun _ -> Var "x") vars in
+      let vars2 = List.modify_at i (fun _ -> Var "y") vars in
+      let pred1 = Pred (name, vars1) in
+      let pred2 = Pred (name, vars2) in
+      print_endline @@ string_of_formula @@ template pred1 pred2;
+      let a = Clausification.clausify @@ Clausification.skolemize @@ template pred1 pred2 in
+      ret := a :: !ret
+    done;
+    List.concat @@ !ret
+  in
 
- *)
+  let preds = list_predicates l in
+  let funcs = list_functions l in
+  List.concat @@ List.map axiom preds
+
+
+
+
 
 (* Main loop *)
 
@@ -210,12 +257,16 @@ let rec main_loop (l: 'a clauseset) : bool =
     (* case new_clauses of *)
     match new_clauses with
     | Some x -> 
-      (print_endline "new"; main_loop (l @ x))
+      (
+        print_endline "More clauses added:"; 
+        print_endline @@ string_of_int_clauseset x;
+        print_endline "---\n";
+        main_loop (l @ x))
     | None -> 
-      true
+      (print_endline "None unifiable: saturated."; true)
   )
   | None ->
-    false
+    (print_endline "Prop solver returned unsat."; false)
 
 
 
@@ -289,7 +340,8 @@ let test_formula () =
   print_newline ();
   
   print_endline @@ bold "Skolemized:";
-  let skolem_formula = Clausification.skolemize (Not test_formula) in
+  (* let skolem_formula = Clausification.skolemize (Not test_formula) in *)
+  let skolem_formula = Clausification.skolemize (test_formula) in
   print_endline @@ string_of_formula skolem_formula;
   print_newline ();
   
@@ -297,6 +349,15 @@ let test_formula () =
   let cnf_formula = Clausification.clausify skolem_formula in
   print_endline @@ string_of_clauseset cnf_formula;
   print_newline ();
+  
+  print_endline @@ bold "Equality axioms:";
+  let eq_axioms = equality_axioms cnf_formula in
+  print_newline ();
+  
+  (* print_endline @@ bold "Optimized CNF:";
+  let cnf_formula = Clausification.clausify_opt test_formula in
+  print_endline @@ string_of_clauseset cnf_formula;
+  print_newline (); *)
   
   let sat = main_loop @@ encode_clauseset cnf_formula in
   print_endline @@ if sat then "FOL SAT" else "FOL UNSAT";

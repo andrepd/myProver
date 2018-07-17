@@ -24,7 +24,10 @@ let parens p = char '(' *> p <* char ')'
 
 let comma = char ','
 
-let pred_op = eat_spaces *> choice [string "="]
+let pred_op = eat_spaces *> choice [ 
+  string "="; 
+  string "<"; 
+  string ">"]
 
 let chainl1 e op =
   let rec go acc =
@@ -47,24 +50,24 @@ let parser_term : string term t =
     )
   )
 
-let parser_atom : string atom t =
+let parser_atom : (bool * string atom) t =
   eat_spaces *> (
     (
       parser_term >>= fun x ->
       pred_op     >>= fun op ->
       parser_term >>| fun y ->
-        Pred (op, [x;y])
+        (true, Pred (op, [x;y]))
     ) <|> (
+      parse_tilde >>= fun sign ->
       ident >>= fun x ->
       parens (sep_by (eat_spaces *> comma) parser_term) >>| fun terms -> 
-        Pred (x, terms)
+        (sign, Pred (x, terms))
     )
   )
 
 let parser_lit : string literal t =
   eat_spaces *> 
-  parse_tilde >>= fun sign ->
-  parser_atom >>| fun lit ->
+  parser_atom >>| fun (sign, lit) ->
     {sign; lit}
 
 let parser_clause : string clause t =
@@ -78,7 +81,8 @@ let parse_cnf s =
   | Ok res -> List.filter (neg List.is_empty) res
   | Error msg -> failwith msg
 
-(* Full formula *)
+(* --- Full formula --- *)
+
 let parser_val = 
   eat_spaces *> (
         (string "T" *> (return @@ Val true ))
@@ -98,8 +102,7 @@ let op_iff = eat_spaces *> (string "==" <|> string "⇔") *> return (fun x y -> 
 
 let parser_predicate : string formula t =
   eat_spaces *> 
-  parse_tilde >>= fun sign ->
-  parser_atom >>| fun x -> 
+  parser_atom >>| fun (sign, x) -> 
     if sign then Atom x else Not (Atom x)
 
 (* let parser_boolean : string formula t = 
@@ -138,7 +141,12 @@ and parser_boolean() : string formula t =
 
     level7 *)
 
-    (parens expr <|> parser_val <|> parser_quantifier() <|> parser_predicate)
+    let parens_expr_wrapper =
+      parse_tilde >>= fun sign ->
+      parens expr >>| fun form ->
+      if sign then form else Not form
+    in
+    (parens_expr_wrapper <|> parser_val <|> parser_quantifier() <|> parser_predicate)
     |> (flip chainl1) (op_and)
     |> (flip chainl1) (op_or )
     |> (flip chainl1) (op_imp)
@@ -146,9 +154,11 @@ and parser_boolean() : string formula t =
   )
 
 let parser_formula : string formula t =
-  (* eat_spaces *> parser_boolean() *)
-  let clause_p = sep_by1 (string ",") (eat_spaces *> parser_boolean()) in
-  let clauseset_p = sep_by1 (string ";") (eat_spaces *> clause_p) in
+  eat_spaces *> parser_boolean()
+
+let parser_file : string formula t =
+  let clause_p = sep_by1 (eat_spaces *> string ",") (eat_spaces *> parser_boolean()) in
+  let clauseset_p = sep_by1 (eat_spaces *> string ";") (eat_spaces *> clause_p) in
   (* List.map <$> (
     List.reduce (lift2 @@ fun x y -> Or (x,y))
   ) clauseset_p
@@ -173,8 +183,9 @@ let parse_file f =
     with
     | Not_found -> s
   in
-  let lines =
-    String.split_on_char ';' f 
+  (* let lines =
+    f
+    String.split_on_char '\n'
     (* |> List.filter (neg @@ (flip String.starts_with) "#") *)
     (* |> List.map ((flip String.split) "#" |> fst) *)
     |> List.map strip_comments
@@ -191,4 +202,16 @@ let parse_file f =
   match error with
   (* | None -> List.reduce (fun x y -> And (x,y)) @@ List.map Legacy.Pervasives.(fun (Ok x) -> x) formulae *)
   | None -> List.reduce (fun x y -> And (x,y)) @@ List.map (fun x -> match x with Error _ -> assert false | Ok x -> x) formulae
-  | Some (Error msg) -> failwith msg
+  | Some (Error msg) -> failwith msg *)
+  let f' = 
+    f
+    |> String.split_on_char '\n'
+    |> List.map (String.trim % strip_comments)
+    |> List.filter (neg String.is_empty) 
+    |> String.concat ""
+    |> tap print_endline
+    (* |> parse_formula *)
+  in
+  match parse_string parser_file f' with
+  | Ok res -> res
+  | Error msg -> failwith msg

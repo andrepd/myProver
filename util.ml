@@ -174,3 +174,27 @@ let call_sat_solver (str: string) : pmodel option =
     Some (process_model model)
   else
     None
+
+
+
+let list_functions (x: 'a clauseset) : ('a * int) list =
+  let rec aux (acc: ('a * int) list) (t: 'a term) =
+    match t with
+    | Var x -> acc
+    | Func (name, args) -> (name, List.length args) :: (List.concat @@ List.map (aux acc) args)
+  in
+  (* List.concat @@ List.map (
+    List.map (
+      fun {sign;lit=Pred(_,args)} -> List.sort_unique compare @@ List.concat @@ List.map (aux []) args
+    )
+  ) x *) 
+  List.sort_unique compare @@
+  List.concat @@ List.map (
+    fun {sign;lit=Pred(_,args)} -> List.sort_unique compare @@ List.concat @@ List.map (aux []) args  
+  ) (List.concat x)
+
+let list_predicates (x: 'a clauseset) : ('a * int) list =
+  List.sort_unique compare @@
+  List.map (
+    fun {sign;lit=Pred(name,args)} -> (name, List.length args)
+  ) (List.concat x)
