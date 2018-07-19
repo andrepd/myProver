@@ -13,25 +13,30 @@ let sign x = x>0
 
 (* ---- *)
 
+(** Map variables to elem *)
 let prop_abstraction (elem: 'a) (x: 'a clauseset) = 
-  subst_clause_set (fun x -> Var elem) x
+  subst_clause_set (fun _ -> Var elem) x
+  (* subst_clause_set (fun x -> Func (elem,[])) x *)
 
 (* let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : pmodel option =  *)
   (* x |> prop_abstraction elem |> to_pcnf |> call_sat_solver *)
 
+(** Check propositional satisfiability of clauseset, and return propositional assignment, if any *)
 let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : passignment option = 
-  (* let aux model numbering =  *)
-
   let numbering = x |> prop_abstraction elem |> prop_numbering in
   let pcnf = numbering |> numbering_to_pcnf in
+  (* print_endline pcnf; *)
+
   match call_sat_solver pcnf with
   | Some model -> (
+    (* Array.iter (function true -> print_string "T " | false -> print_string "F ") model; print_newline(); *)
     let aux = fun x -> let x' = abs(x)-1 in model.(x') = sign x in
     let assignments = List.map (List.map aux) (fst numbering) in
     Some assignments
   )
   | None -> None
 
+(** Encode a string clauseset to an int clauseset *)
 let encode_clauseset (x: string clauseset) : int clauseset =
   let table = ref Map.empty in
   let num = ref 1 in
@@ -85,30 +90,80 @@ let encode_clauseset (x: string clauseset) : int clauseset =
     r
   ) x
 
-let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option =
-  (* Look for unifiable literals 
-   * Find them and apply to clauses where they appear
-   * If not found return None
-   *)
+let reencode_clauseset (x: int clauseset) : int clauseset =
+  let table_var = ref Map.empty in
+  let num_var = ref (-1) in
 
-  (
+  let get_num_var (s: int) : int =
+    try
+      Map.find s !table_var
+    with
+      Not_found -> (
+        table_var := Map.add s !num_var !table_var;
+        let r = !num_var in
+        num_var := !num_var - 2;
+        r
+      )
+  in
+
+  let rec encode_term (x: int term) : int term =
+    match x with
+    | Var x -> 
+      Var (get_num_var x)
+    | Func (name, args) ->
+      Func (name, List.map encode_term args)
+      
+  in
+
+  let encode_atom (x: int atom) : int atom =
+    let Pred (name, args) = x in
+    Pred (name, List.map encode_term args)
+  in
+
+  List.map (fun clause ->
+    let r = List.map (fun {sign;lit} -> 
+      {sign; lit = encode_atom lit}
+    ) clause in
+    table_var := Map.empty;
+    num_var := -1;
+    r
+  ) x
+
+
+(** Generate new instances of a clauseset, guided by an assignment *)
+(* Look for unifiable literals 
+ * Find them and apply to clauses where they appear
+ * If not found return None
+ *)
+let inst_gen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset option =
+  (* (
     List.iter (fun x ->
       List.iter (
         function true -> print_string "T " | false -> print_string "F "
       ) x;
       print_newline()
     ) assignments
-  );
-  (* Terrible performance *)
-  (* type 'a pair = 
-    { n1: int
-    ; n2: int
-    ; lit1: 'a literal
-    ; lit2: 'a literal
-    } *)
+  ); *)
+  (* let assignments = List.map (List.map (fun x -> )) assignments in *)
+
+  (** Return lazylist of potentially unifiable literals *)
   let pairs (l: 'a clauseset) : ('a literal * int * 'a literal * int) LazyList.t =
     let ret = ref LazyList.nil in
 
+    let selecteds : int list = 
+      (* List.map (List.find (fun {sign;lit} -> model.(lit-1) = sign)) l *)
+      (* List.map (List.index_of true %> Option.get) assignments *)
+      (*List.map (List.index_of true %> Option.get) assignments*)
+      List.map (List.filteri_map (fun i elem -> if elem then Some i else None) %> List.shuffle %> List.hd) assignments
+    in
+
+    (* DEBUG *)
+    print_endline "Iteration";
+    List.iter (fun x -> print_int x; print_newline()) selecteds;
+    print_newline();
+    print_endline "Finding unifiables...";
+
+    (*
     let n = List.length l - 1 in
     (* Pairs of clauses *)
     for i = 0 to n do
@@ -125,14 +180,25 @@ let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option 
               ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j) !ret
           done
         done
-
       done
     done;
     !ret
+    *)
 
+    List.iter2i (fun i clause_a ii ->
+      (* let ii = List.at selecteds i in *)
+      List.iter2i (fun j clause_b jj ->
+        (* let jj = List.at selecteds j in *)
+        (*ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j) !ret*)  (*REREREREREEEEEEEEEEE*)
+        ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j+i+1) !ret
+      ) (List.drop (i+1) l) (List.drop (i+1) selecteds)
+    ) l selecteds;
+    !ret
   in
 
-  let try_unify (a,i,b,j) =
+  (* Tries to unify a and b *)
+  (* let try_unify (a,i,b,j) = *)
+  let try_unify a b =
     (* let b = subst_literal (fun x -> Var (x^"'")) b in *)
 
     let {sign=asign; lit=Pred (aname, aargs)} = a in
@@ -142,11 +208,11 @@ let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option 
     dbg @@ lazy (string_of_literal b); *)
     dbg @@ lazy (string_of_int_literal a);
     dbg @@ lazy (string_of_int_literal b);
-    print_newline ();
+    dbg @@ lazy "";
 
-    if asign == bsign || aname <> bname then
-      None
-    else
+    (* Potentially unifiable if: same name, opposite sign *)
+    if aname == bname && asign <> bsign then
+      (* And if unification succeeds *)
       try
         (* let bargs' = List.map (subst_term (fun x -> Var (x^"'"))) bargs in *)
         let subst = mgu_list (List.combine aargs bargs) in
@@ -159,114 +225,123 @@ let inst_gen (x: 'a clauseset) (assignments: passignment) : 'a clauseset option 
           let Var y = subst x
         in *)
         (* let subst' = (fun x -> if String.ends_with "'" x then subst (String.rchop x) else subst x) in *)
-        Some (i,j,subst)
+        (* Some (i,j,subst) *)
+        Some subst
         (* Some (i,j,subst,subst) *)
       with
       | Failure _ -> None
+    else
+      None
   in
 
   (* let rename = fun x -> Var (x^"'") in
   let dename = fun x -> Var (if String.ends_with x "'" then String.rchop x else x) in *)
 
   let rename = fun x -> Var (x-1) in
-  let dename = fun x -> Var (if x mod 2 = 0 then x-1 else x) in
+  (* let dename = fun x -> Var (if x mod 2 = 0 then x-1 else x) in *)  (* REEEEEEE *)
+  let dename = fun x -> Var (if x mod 2 = 0 then x+1 else x) in
+
+  (** New clauses from clauses a and b and substitution subst *)
+  let new_clauses (a: 'a clause) (b: 'a clause) subst : 'a clauseset = 
+    let clause_a = subst_clause subst (a) in
+    (* let clause_b = subst_clause subst (subst_clause rename @@ a) in  (* REEEEEE *) *)
+    let clause_b = subst_clause subst (subst_clause rename @@ b) in
+
+    (*let clause_a = subst_clause dename clause_a in
+    let clause_b = subst_clause dename clause_b in
+
+    [clause_a; clause_b]*)
+
+    (*reencode_clauseset [clause_a; clause_b]*)
+
+    reencode_clauseset (if clause_a = clause_b then [clause_a] else [clause_a; clause_b])
+  in
+
+  (*(** Tells if clauses c are redundant in l *)
+  let redundant c l =
+    print_endline "testing";
+    print_endline @@ string_of_int_clauseset c;
+    if List.exists (fun x -> List.mem x l) c then
+      (print_endline "exists"; true)
+    else
+      (print_endline "new"; false)
+  in*)
+
+  (** Filters clauses that are redundant in l *)
+  let remove_redundant (c: 'a clauseset) (l: 'a clauseset) =
+    print_endline "testing";
+    List.filter (fun x ->
+      print_endline @@ string_of_int_clause x;
+      if List.mem x l then
+        (print_endline "exists"; false)
+      else
+        (print_endline "new"; true)
+    ) c
+  in
 
   (* let pair = LazyList.find (function Some _ -> true | None -> False) in *)
   try
     (* let i,j,s = LazyList.find_map try_unify (pairs x) in *)
     (* let Some (i,j,s) = LazyList.find (function Some _ -> true | None -> false) @@ LazyList.map try_unify (pairs x) in *)
     let foo = 
-      pairs x
-      |> LazyList.to_list
-      |> List.shuffle
-      |> LazyList.of_list
+      pairs formula
+      |> LazyList.to_list |> List.shuffle |> LazyList.of_list (* Randomize *)
       |> LazyList.map (fun (a,i,b,j) -> (a,i,subst_literal rename b,j))
-      |> LazyList.map try_unify
+      |> LazyList.map (fun (a,i,b,j) -> let s = print_int i; print_string "/"; print_int j; print_newline();   try_unify a b in match s with Some subst -> Some (i,j,subst) | None -> None)
+      (* |> LazyList.map (function Some (i,j,s) -> let n = new_clauses (List.at formula i) (List.at formula j) s in if redundant n formula then None else Some n | None -> None) *)
+      |> LazyList.map (function Some (i,j,s) -> let n = new_clauses (List.at formula i) (List.at formula j) s in let n' = remove_redundant n formula in if List.is_empty n' then None else Some n' | None -> None)
       |> LazyList.find (function Some _ -> true | None -> false) 
     in
-    let Some (i,j,s) = foo in
+    (*** let i,j,s = Option.get foo in ***)
     (* let Some (i,j,sa,sb) = foo in *)
     (* Some [subst_clause s (List.at x i); subst_clause s (List.at x j)] *)
     (* Some [subst_clause sa (List.at x i); subst_clause sb (List.at x j)] *)
+    foo
     
-    let clause_a = subst_clause s (List.at x i) in
-    let clause_b = subst_clause s (subst_clause rename @@ List.at x j) in
-
-    let clause_a = subst_clause dename clause_a in
-    let clause_b = subst_clause dename clause_b in
-
-    Some [clause_a; clause_b]
-
   with
   | Not_found -> None
 
 
 
-(* Equality *)
-
-let equality_axioms (l: 'a clauseset) : 'a clauseset =
-  let axiom ((name,arity): ('a * int)) : 'a clauseset =
-    (* if arity = 1 then
-      let a = Parser.parse_formula "x=y==(P(x)==P(y))" in 
-      Clausification.clausify @@ Clausification.skolemize @@ a
-    else
-      failwith "unimplemented" *)
-    let template a b =
-      Iff (
-        Atom (Pred ("=", [Var "x";Var "y"])),
-        Iff (
-          Atom a,
-          Atom b
-        )
-      )
-    in
-    let vars = 
-      Char.range 'a'
-      |> Enum.take arity
-      |> map (fun x -> Var (Char.escaped x))
-      |> List.of_enum
-    in
-    (* let pred = Pred (name, vars) in *)
-    let ret = ref [] in
-    for i = 0 to arity-1 do
-      let vars1 = List.modify_at i (fun _ -> Var "x") vars in
-      let vars2 = List.modify_at i (fun _ -> Var "y") vars in
-      let pred1 = Pred (name, vars1) in
-      let pred2 = Pred (name, vars2) in
-      print_endline @@ string_of_formula @@ template pred1 pred2;
-      let a = Clausification.clausify @@ Clausification.skolemize @@ template pred1 pred2 in
-      ret := a :: !ret
-    done;
-    List.concat @@ !ret
-  in
-
-  let preds = list_predicates l in
-  let funcs = list_functions l in
-  List.concat @@ List.map axiom preds
-
-
-
-
-
 (* Main loop *)
 
+(** Main loop:
+  *   - Check satisfiability
+  *   - If UNSAT, we are done
+  *   - If SAT, use the model to guide generation of clauses, add them to the set, and repeat
+  *)
 let rec main_loop (l: 'a clauseset) : bool = 
+  (* let designated = 
+    list_functions l
+    |> List.filter (fun x -> snd x = 0)
+    |> List.shuffle
+    |> List.hd |> fst
+  in
+  match check_prop_satisfiability designated l with *)
+
+  print_endline "Current clauses:";
+  print_endline @@ string_of_int_clauseset l;
+  print_endline "End.\n";
+
   match check_prop_satisfiability 0 l with
   | Some assignments -> (
     let new_clauses = inst_gen l assignments in
-    (* case new_clauses of *)
     match new_clauses with
-    | Some x -> 
-      (
-        print_endline "More clauses added:"; 
-        print_endline @@ string_of_int_clauseset x;
-        print_endline "---\n";
-        main_loop (l @ x))
-    | None -> 
-      (print_endline "None unifiable: saturated."; true)
+    | Some x -> (
+      print_endline "More clauses added:"; 
+      print_endline @@ string_of_int_clauseset x;
+      print_endline "---\n";
+      main_loop (l @ x)
+    )
+    | None -> (
+      print_endline "None unifiable: saturated."; 
+      true
+    )
   )
-  | None ->
-    (print_endline "Prop solver returned unsat."; false)
+  | None -> (
+    print_endline "Prop solver returned unsat."; 
+    false
+  )
 
 
 
@@ -293,7 +368,14 @@ let test_cnf () =
   print_newline ();
 
   print_endline @@ bold "Propositional abstraction:";
-  let prop_formula = prop_abstraction 0 encoded_formula in
+  let designated = 
+    list_functions_clauseset encoded_formula
+    |> List.filter (fun x -> snd x = 0)
+    |> List.shuffle
+    |> List.hd |> fst
+  in
+  (* let prop_formula = prop_abstraction 0 encoded_formula in *)
+  let prop_formula = prop_abstraction designated encoded_formula in
   print_endline @@ string_of_int_clauseset @@ prop_formula;
   print_newline ();
   
@@ -303,7 +385,14 @@ let test_cnf () =
   
   print_endline @@ bold "Prop satisfiability of above:";
   (* let sat = check_prop_satisfiability 0 prop_formula in *)
-  let sat = check_prop_satisfiability 0 encoded_formula in
+  let designated = 
+    list_functions_clauseset encoded_formula
+    |> List.filter (fun x -> snd x = 0)
+    |> List.shuffle
+    |> List.hd |> fst
+  in
+  (* let sat = check_prop_satisfiability 0 encoded_formula in *)
+  let sat = check_prop_satisfiability designated encoded_formula in
   print_endline @@ (match sat with Some _ -> "SAT" | None -> "UNSAT");
   print_newline ();
 
@@ -351,7 +440,8 @@ let test_formula () =
   print_newline ();
   
   print_endline @@ bold "Equality axioms:";
-  let eq_axioms = equality_axioms cnf_formula in
+  let eq_axioms = Equality.axioms_string cnf_formula in
+  print_endline @@ string_of_clauseset eq_axioms;
   print_newline ();
   
   (* print_endline @@ bold "Optimized CNF:";
@@ -359,7 +449,7 @@ let test_formula () =
   print_endline @@ string_of_clauseset cnf_formula;
   print_newline (); *)
   
-  let sat = main_loop @@ encode_clauseset cnf_formula in
+  let sat = main_loop @@ encode_clauseset (cnf_formula @ eq_axioms) in
   print_endline @@ if sat then "FOL SAT" else "FOL UNSAT";
 
   ()

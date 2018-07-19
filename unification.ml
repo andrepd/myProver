@@ -26,8 +26,10 @@ let rec unify (env: 'a subst) (eqs: ('a term * 'a term) list) : 'a subst =
       unify env ((Map.find x env, t)::xs)
     else
       let env' = 
-        if istriv env x t then env
-        else Map.add x t env
+        if istriv env x t then 
+          env
+        else 
+          Map.add x t env
       in
       unify env' xs
 
@@ -38,7 +40,7 @@ let rec reduce (env: 'a subst) : 'a subst =
 
 (* let mgu_list = reduce % unify Map.empty *)
 let mgu_list x = 
-  reduce @@ unify Map.empty x |> map_to_func
+  (reduce @@ unify Map.empty x) |> map_to_func
 
 (* let mgu = mgu_list % List.singleton *)
 let mgu x = mgu_list @@ List.singleton x
