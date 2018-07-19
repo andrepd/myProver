@@ -2,6 +2,8 @@ open Batteries
 
 open Types
 
+open Debug
+
 let ($) = (@@)
 
 let (|=>) a b x = 
@@ -76,7 +78,6 @@ let rec subst_formula (s: 'a -> 'a term) (f: 'a formula) =
   let needs_rename x p = 
     List.exists (fun y -> List.mem x (vars_term $ s y)) (free_vars $ Forall (x,p))
   in
-
   match f with 
   | Val _ -> f
   | Atom x -> Atom (subst_atom s x)
@@ -106,7 +107,7 @@ let rec subst_formula (s: 'a -> 'a term) (f: 'a formula) =
     )
   )
 
-
+(* --- *)
 
 (* let prop_numbering (x: 'a clauseset) : int LazyList.t LazyList.t * (int*int) = *)
 let prop_numbering (x: 'a clauseset) : int List.t List.t * (int*int) =
@@ -152,9 +153,9 @@ let to_pcnf (x: 'a clauseset) : string =
   x |> prop_numbering |> numbering_to_pcnf
 
 let call_sat_solver (str: string) : pmodel option =
-  print_endline "FILE";
-  print_string str;
-  print_endline "ENDFILE";
+  debug_endline "FILE";
+  debug_string str;
+  debug_endline "ENDFILE";
   (* let in_descr = Unix.descr_of_in_channel @@ IO.input_string str in
   let out_descr = Unix.descr_of_out_channel @@ IO.output_string () in
   let pid = Unix.create_process "./sat" [||] in_descr out_descr Unix.stderr in *)
@@ -168,17 +169,9 @@ let call_sat_solver (str: string) : pmodel option =
   let model = IO.read_all err_chan in
   let status = Unix.close_process_full (out_chan, in_chan, err_chan) in
 
-  (* let process_model s =
-    String.split_on_char ' ' s
-    (* |> List.map Int.of_string *)
-    (* Array.init (List.length l) () *)
-    |> List.map (fun x -> Int.of_string x > 0)
-    |> Array.of_list
-  in *)
-
   let process_model s =
     let l = String.split_on_char ' ' s |> List.map String.trim |> List.filter (neg String.is_empty) in
-    (* print_int (List.length l); *)
+    (* debug_int (List.length l); *)
     let a = Array.make (List.length l) false in
     List.iter (fun x ->
       try
@@ -186,32 +179,28 @@ let call_sat_solver (str: string) : pmodel option =
         let sign = x>0 in
         let lit = abs(x) in
         a.(lit-1) <- sign
-      (* with Failure "int_of_string" -> *)
       with Failure _ ->
         ()
     ) l;
     a
   in
 
-  (* print_endline sat;
-  print_endline model; *)
-  print_endline sat;
+  debug_endline sat;
   if sat.[0] == 'S' then (
-    (* Some (process_model @@ String.lchop ~n:12 res) *)
-    print_string model;
+    debug_string model;
     Some (process_model model)
   ) else
     None
 
 
 
-let rec list_functions_term (t: 'a term) =
+let rec list_functions_term (t: 'a term) : ('a * int) list =
   match t with
   | Var x -> []
   | Func (name, args) -> (name, List.length args) :: (List.concat @@ List.map list_functions_term args)
 
 let list_functions_clauseset (x: 'a clauseset) : ('a * int) list =
-  List.sort_unique compare @@
+  (* List.sort_unique compare @@ *)
   List.concat @@ List.map (
     fun {sign;lit=Pred(_,args)} -> List.concat @@ List.map list_functions_term args  
   ) (List.concat x)
@@ -227,11 +216,11 @@ let list_functions_formula (x: 'a formula) : ('a * int) list =
     | Forall (x, p) | Exists (x, p) ->
       aux p
   in
-  List.sort_unique compare @@ aux x
-
+  (* List.sort_unique compare @@  *)
+  aux x
 
 let list_predicates_clauseset (x: 'a clauseset) : ('a * int) list =
-  List.sort_unique compare @@
+  (* List.sort_unique compare @@ *)
   List.map (
     fun {sign;lit=Pred(name,args)} -> (name, List.length args)
   ) (List.concat x)
@@ -247,4 +236,5 @@ let rec list_predicates_formula (f: 'a formula) : ('a * int) list =
     | Forall (x, p) | Exists (x, p) ->
       aux p
   in
-  List.sort_unique compare @@ aux f
+  (* List.sort_unique compare @@  *)
+  aux f

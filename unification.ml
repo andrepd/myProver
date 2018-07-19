@@ -38,9 +38,7 @@ let rec reduce (env: 'a subst) : 'a subst =
   let env' = Map.map (Util.subst_term env_func) env in
   if env' = env then env else reduce env'
 
-(* let mgu_list = reduce % unify Map.empty *)
 let mgu_list x = 
   (reduce @@ unify Map.empty x) |> map_to_func
 
-(* let mgu = mgu_list % List.singleton *)
 let mgu x = mgu_list @@ List.singleton x
