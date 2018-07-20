@@ -136,34 +136,37 @@ let reencode_clauseset (x: int clauseset) : int clauseset =
  *)
 let inst_gen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset option =
   (* (
+    if dbg_flag then begin
     List.iter (fun x ->
       List.iter (
         function true -> debug_string "T " | false -> debug_string "F "
       ) x;
       debug_newline()
     ) assignments
+    end;
   ); *)
 
   (** Return lazylist of potentially unifiable literals *)
-  let pairs (l: 'a clauseset) : ('a literal * int * 'a literal * int) LazyList.t =
-    let ret = ref LazyList.nil in
+  let pairs (l: 'a clauseset) : ('a literal * int * 'a literal * int) Seq.t =
+    let ret = ref Seq.nil in
 
     let selecteds : int list = 
       (* List.map (List.find (fun {sign;lit} -> model.(lit-1) = sign)) l *)
-      (* List.map (List.index_of true %> Option.get) assignments *)
-      List.map (List.filteri_map (fun i elem -> if elem then Some i else None) %> List.shuffle %> List.hd) assignments
+      List.map (List.index_of true %> Option.get) assignments
+      (* List.map (List.filteri_map (fun i elem -> if elem then Some i else None) %> List.shuffle %> List.hd) assignments *)
     in
 
-    (* DEBUG *)
+    if dbg_flag then begin
     debug_endline "Iteration";
     List.iter (fun x -> debug_int x; debug_newline()) selecteds;
     debug_newline();
     debug_endline "Finding unifiables...";
+    end;
 
     List.iter2i (fun i clause_a ii ->
       List.iter2i (fun j clause_b jj ->
-        (*ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j) !ret*)  (*REEEEEEEEEEE*)
-        ret := LazyList.cons (List.at clause_a ii, i, List.at clause_b jj, j+i+1) !ret
+        (*ret := Seq.cons (List.at clause_a ii, i, List.at clause_b jj, j) !ret*)  (*REEEEEEEEEEE*)
+        ret := Seq.cons (List.at clause_a ii, i, List.at clause_b jj, j+i+1) !ret
       ) (List.drop (i+1) l) (List.drop (i+1) selecteds)
     ) l selecteds;
     !ret
@@ -180,9 +183,11 @@ let inst_gen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset o
   let try_unify (a: 'a literal) (b: 'a literal) =
     let b = subst_literal rename b in
 
+    if dbg_flag then begin
     debug_endline (string_of_int_literal a);
     debug_endline (string_of_int_literal b);
     debug_endline "";
+    end;
 
     let {sign=asign; lit=Pred (aname, aargs)} = a in
     let {sign=bsign; lit=Pred (bname, bargs)} = b in
@@ -213,19 +218,25 @@ let inst_gen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset o
 
   (** Filters clauses that are redundant in l *)
   let remove_redundant (c: 'a clauseset) (l: 'a clauseset) =
+    if dbg_flag then begin
     debug_endline "testing";
+    end;
     List.filter (fun x ->
+      if dbg_flag then begin
       debug_endline @@ string_of_int_clause x;
       if List.mem x l then
         (debug_endline "exists"; false)
       else
         (debug_endline "new"; true)
+      end else begin
+      not $ List.mem x l
+      end;
     ) c
   in
 
-  try
+  (* try *)
     let foo = 
-      pairs formula
+      (*pairs formula
       |> LazyList.to_list |> List.shuffle |> LazyList.of_list (* Randomize *)
       |> LazyList.map (fun (a,i,b,j) -> 
         debug_int i; debug_string "/"; debug_int j; debug_newline();
@@ -239,12 +250,34 @@ let inst_gen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset o
         let n = remove_redundant n formula in 
         if List.is_empty n then None else Some n 
       ))
-      |> LazyList.find (function Some _ -> true | None -> false) 
+      |> LazyList.find (function Some _ -> true | None -> false)*)
+
+      let open Option.Infix in
+      pairs formula
+      (* |> Seq.to_list |> List.shuffle |> Seq.of_list (* Randomize *) *)
+      |> Seq.map (
+        fun (a,i,b,j) -> 
+        if dbg_flag then begin
+        debug_int i; debug_string "/"; debug_int j; debug_newline();
+        end;
+        let subst = try_unify a b in (* Try to unify *)
+        begin match subst with Some subst -> Some (i,j,subst) | None -> None end (* If successful return clause indices and substitution *)
+        >>= fun (i,j,subst) ->
+        let a = List.at formula i in
+        let b = List.at formula j in
+        let n = new_clauses a b subst in (* Build new clauses *)
+        let n = remove_redundant n formula in (* Remove redundant clauses *)
+        if List.is_empty n then None else Some n (* Unless all clauses were redundant, return success *)
+      )
+      |> Seq.find Option.is_some 
     in
-    foo
+    (* Option.get foo *)
+    match foo with 
+    | Some x -> x
+    | None -> None
     
-  with
-  | Not_found -> None
+  (* with
+  | Not_found -> None *)
 
 
 
@@ -271,27 +304,35 @@ let main_loop (l: 'a clauseset) : bool =
   let rec loop it l =
     print_string @@ "\rIt: " ^ string_of_int it; flush stdout;
 
+    if dbg_flag then begin
     debug_endline "Current clauses:";
     debug_endline @@ string_of_int_clauseset l;
     debug_endline "End.\n";
+    end;
 
     match check_prop_satisfiability designated l with
     | Some assignments -> (
       let new_clauses = inst_gen l assignments in
       match new_clauses with
       | Some x -> (
+        if dbg_flag then begin
         debug_endline "More clauses added:"; 
         debug_endline @@ string_of_int_clauseset x;
         debug_endline "---\n";
+        end;
         loop (succ it) (l @ x)
       )
       | None -> (
+        if dbg_flag then begin
         debug_endline "None unifiable: saturated."; 
+        end;
         true
       )
     )
     | None -> (
+      if dbg_flag then begin
       debug_endline "Prop solver returned unsat."; 
+      end;
       false
     )
   in

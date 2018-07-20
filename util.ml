@@ -153,9 +153,11 @@ let to_pcnf (x: 'a clauseset) : string =
   x |> prop_numbering |> numbering_to_pcnf
 
 let call_sat_solver (str: string) : pmodel option =
+  if dbg_flag then begin  
   debug_endline "FILE";
   debug_string str;
   debug_endline "ENDFILE";
+  end;
   (* let in_descr = Unix.descr_of_in_channel @@ IO.input_string str in
   let out_descr = Unix.descr_of_out_channel @@ IO.output_string () in
   let pid = Unix.create_process "./sat" [||] in_descr out_descr Unix.stderr in *)
@@ -167,7 +169,7 @@ let call_sat_solver (str: string) : pmodel option =
   let sat = IO.read_all out_chan in
   (* let model = IO.nread err_chan (1024*4) in *)
   let model = IO.read_all err_chan in
-  let status = Unix.close_process_full (out_chan, in_chan, err_chan) in
+  (* let status = Unix.close_process_full (out_chan, in_chan, err_chan) in *)
 
   let process_model s =
     let l = String.split_on_char ' ' s |> List.map String.trim |> List.filter (neg String.is_empty) in
@@ -185,9 +187,13 @@ let call_sat_solver (str: string) : pmodel option =
     a
   in
 
+  if dbg_flag then begin
   debug_endline sat;
+  end;
   if sat.[0] == 'S' then (
-    debug_string model;
+    if dbg_flag then begin
+    debug_string model
+    end;
     Some (process_model model)
   ) else
     None
