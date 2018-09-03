@@ -244,3 +244,98 @@ let rec list_predicates_formula (f: 'a formula) : ('a * int) list =
   in
   (* List.sort_unique compare @@  *)
   aux f
+
+
+
+(** Encode a string clauseset to an int clauseset *)
+let encode_clauseset (x: string clauseset) : int clauseset =
+  let table = ref Map.empty in
+  let num = ref 1 in
+  let table_var = ref Map.empty in
+  let num_var = ref (-1) in
+
+  let get_num (s: string) : int =
+    try
+      Map.find s !table
+    with
+      Not_found -> (
+        table := Map.add s !num !table;
+        let r = !num in
+        incr num;
+        r
+      )
+  in
+
+  let get_num_var (s: string) : int =
+    try
+      Map.find s !table_var
+    with
+      Not_found -> (
+        table_var := Map.add s !num_var !table_var;
+        let r = !num_var in
+        num_var := !num_var - 2;
+        r
+      )
+  in
+
+  let rec encode_term (x: string term) : int term =
+    match x with
+    | Var x -> 
+      Var (get_num_var x)
+    | Func (name, args) ->
+      Func (get_num name, List.map encode_term args)
+      
+  in
+
+  let encode_atom (x: string atom) : int atom =
+    let Pred (name, args) = x in
+    Pred (get_num name, List.map encode_term args)
+  in
+
+  List.map (fun clause ->
+    let r = List.map (fun {sign;lit} -> 
+      {sign; lit = encode_atom lit}
+    ) clause in
+    table_var := Map.empty;
+    num_var := -1;
+    r
+  ) x
+
+let reencode_clauseset (x: int clauseset) : int clauseset =
+  let table_var = ref Map.empty in
+  let num_var = ref (-1) in
+
+  let get_num_var (s: int) : int =
+    try
+      Map.find s !table_var
+    with
+      Not_found -> (
+        table_var := Map.add s !num_var !table_var;
+        let r = !num_var in
+        num_var := !num_var - 2;
+        r
+      )
+  in
+
+  let rec encode_term (x: int term) : int term =
+    match x with
+    | Var x -> 
+      Var (get_num_var x)
+    | Func (name, args) ->
+      Func (name, List.map encode_term args)
+      
+  in
+
+  let encode_atom (x: int atom) : int atom =
+    let Pred (name, args) = x in
+    Pred (name, List.map encode_term args)
+  in
+
+  List.map (fun clause ->
+    let r = List.map (fun {sign;lit} -> 
+      {sign; lit = encode_atom lit}
+    ) clause in
+    table_var := Map.empty;
+    num_var := -1;
+    r
+  ) x

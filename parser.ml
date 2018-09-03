@@ -24,7 +24,7 @@ let ident =
   eat_spaces *>
   take_while1 (function 'a'..'z' | 'A'..'Z' | '_' -> true | '0' .. '9' -> if !rest then true else (rest:=true; false) | _ -> false)
 
-let parens p = char '(' *> p <* char ')'
+let parens p = char '(' *> (eat_spaces *> p) <* char ')'
 
 let comma = char ','
 
@@ -106,7 +106,7 @@ let op_imp = eat_spaces *> (string "=>" <|> string "⇒") *> return (fun x y -> 
 let op_iff = eat_spaces *> (string "==" <|> string "⇔") *> return (fun x y -> Iff (x,y))
 
 let parser_predicate : string formula t =
-  eat_spaces *> 
+  (* eat_spaces *>  *)
   parser_atom >>| fun (sign, x) -> 
     if sign then Atom x else Not (Atom x)
 
@@ -136,6 +136,7 @@ and parser_boolean() : string formula t =
       if sign then form else Not form
     in
 
+    eat_spaces *> 
     (parens_expr_wrapper <|> parser_val <|> parser_quantifier() <|> parser_predicate)
     |> (flip chainl1) (op_and)
     |> (flip chainl1) (op_or )
