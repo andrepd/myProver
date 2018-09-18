@@ -11,11 +11,6 @@ let sign x = x>0
 
 (* ---- *)
 
-
-
-
-
-
 let test_cnf() =
   let input = IO.read_all stdin in
 
@@ -95,7 +90,7 @@ let test_formula() =
   print_newline();
   
   print_endline @@ bold "Equality axioms:";
-  let eq_axioms = Equality.axioms_string cnf_formula in
+  let eq_axioms = Equality.axioms cnf_formula in
   print_endline @@ string_of_clauseset eq_axioms;
   print_newline();
   
@@ -105,9 +100,9 @@ let test_formula() =
   print_newline(); *)
   
   let full_formula = 
-    if List.mem ("=",2) (list_predicates_clauseset cnf_formula ) then (
+    if Equality.has_equality cnf_formula then (
       print_endline "Adding equality axioms.";
-      cnf_formula @ eq_axioms
+      eq_axioms @ cnf_formula
     ) else (
       print_endline "Won't add equality axioms.";
       cnf_formula

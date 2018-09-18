@@ -63,7 +63,8 @@ let rec subst_term (s: 'a -> 'a term) (f: 'a term) =
   | Func (name, args) -> Func (name, List.map (subst_term s) args)
 
 let subst_atom (s: 'a -> 'a term) (f: 'a atom) =
-  let Pred (name, args) = f in Pred (name, List.map (subst_term s) args)
+  match f with
+  | Pred (name, args) -> Pred (name, List.map (subst_term s) args)
 
 let subst_literal (s: 'a -> 'a term) ({sign; lit}: 'a literal) = 
   {sign; lit=subst_atom s lit}
@@ -134,11 +135,13 @@ let prop_numbering (x: 'a clauseset) : int List.t List.t * (int*int) =
       ) clause
     ) x
   in
-  (clauses, (!num-1, List.length clauses))
+  let nvars = !num-1 in
+  let nclauses = List.length clauses in
+  (clauses,(nvars,nclauses))
 
 (* let numbering_to_pcnf (x: int List.t List.t * (int*int)) : string = *)
 let numbering_to_pcnf ((clauses,(nvars,nclauses)): int List.t List.t * (int*int)) : string =
-  let body = ref "" in
+(*   let body = ref "" in
   List.iter (fun clause ->
     List.iter (fun n -> 
       body := !body ^ Int.to_string n ^ " "
@@ -146,7 +149,21 @@ let numbering_to_pcnf ((clauses,(nvars,nclauses)): int List.t List.t * (int*int)
     body := !body ^ "0\n"
   ) clauses;
   let header = "p cnf " ^ Int.to_string nvars ^ " " ^ Int.to_string nclauses ^ "\n" in
-  header ^ !body
+  header ^ !body *)
+  let body = Buffer.create ((nvars * 4) * nclauses) in
+  Buffer.add_string body "p cnf ";
+  Buffer.add_string body (Int.to_string nvars);
+  Buffer.add_char   body (' ');
+  Buffer.add_string body (Int.to_string nclauses);
+  Buffer.add_char   body ('\n');
+  List.iter (fun clause ->
+    List.iter (fun n -> 
+      Buffer.add_string body (Int.to_string n);
+      Buffer.add_char body ' '
+    ) clause;
+    Buffer.add_string body "0\n"
+  ) clauses;
+  Buffer.contents body
   
 
 let to_pcnf (x: 'a clauseset) : string =
