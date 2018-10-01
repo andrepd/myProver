@@ -1,0 +1,7 @@
+# @x y.\z.eq(op(x,y),z)
+@x. op(x,e()) = x & op(e(),x) = x ; # more comments
+#@x. op(x,inv(x)) = e() ;
+@x. op(x,inv(x)) = e() & op(inv(x),x) = e() ;
+@x y z. op(op(x,y),z) = op(x,op(y,z)) ;
+#\x y. ~(inv(op(x,y)) = op(inv(y),inv(x))) ;
+~(@x y. inv(op(x,y)) = op(inv(y),inv(x))) ;

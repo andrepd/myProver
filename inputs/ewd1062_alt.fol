@@ -1,0 +1,7 @@
+@x. x < x ;
+@x y z. x < y & y < z => x < z ;
+@x y. f(x) < y == x < g(y) ;
+~( 
+  (@x y. x < y => f(x) < f(y)) &
+  (@x y. x < y => g(x) < g(y))
+)

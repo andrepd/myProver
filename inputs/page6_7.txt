@@ -1,0 +1,3 @@
+A(x,xx,y), A(xx,xxx,y), A(xxx,xxxx,y), A(xxxx,xxxxx,y), A(xxxxx,xxxxxx,y), A(xxxxxx,xxxxxxx,y), A(xxxxxxx,xxxxxxxx,y) ;
+~A(c(),d(),y), ~A(cc(),d(),y), ~A(ccc(),d(),y), ~A(cccc(),d(),y), ~A(ccccc(),d(),y), ~A(cccccc(),d(),y), ~A(ccccccc(),d(),y)
+y

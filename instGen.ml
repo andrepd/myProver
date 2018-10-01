@@ -28,16 +28,20 @@ let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : passignment option 
 
 (* --- *)
 
-type 'a clause_i = {
-  clause: 'a clause;
+type clause_i = {
+  clause: int clause;
 }
 
-type 'a clauseset_i = {
-  clauseset: 'a clauseset;
+type clauseset_i = {
+  clauseset: int clauseset;
 }
 
-type 'a instgen_state = {
-  formula: 'a clauseset_i
+module Trie = Trie.Literal
+type 'a trie = ('a literal * 'a clause) Trie.t
+
+type instgen_state = {
+  formula: clauseset_i;
+  trie: int trie;
 }
 
 (* --- *)
@@ -47,7 +51,7 @@ type 'a instgen_state = {
  * Find them and apply to clauses where they appear
  * If not found return None
  *)
-let instgen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset option =
+let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) : 'a clauseset option =
   (* (
     if dbg_flag then begin
     List.iter (fun x ->
@@ -84,14 +88,47 @@ let instgen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset op
     !ret
   in
 
-  (* let rename = fun x -> Var (x^"'") in
-  let dename = fun x -> Var (if String.ends_with x "'" then String.rchop x else x) in *)
+  (** Return list of selected literals *)
+  let selecteds : ('a literal * 'a clause) List.t =
+    let ret = ref [] in
+
+
+    let selecteds' : int list = 
+      if not dbg_flag then (
+        List.map (List.index_of true %> Option.get) assignments
+      ) 
+
+      else (
+        debug_endline "Iteration";
+        List.map (fun c -> 
+          List.index_of true c |> Option.get
+          |> tap (fun x -> debug_int x; debug_newline())
+        ) assignments
+        |> tap (const @@ debug_endline "Finding unifiables...")
+      )
+    in
+
+    (* debug_endline "Iteration";
+    List.iter (fun x -> debug_int x; debug_newline()) selecteds';
+    debug_newline();
+    debug_endline "Finding unifiables...";
+    end; *)
+
+    List.iter2 (fun clause ii ->
+      ret := (List.at clause ii, clause) :: !ret
+    ) formula selecteds';
+    !ret
+  in
+
+  let selecteds_set : ('a atom * 'a clause) Set.t = 
+    selecteds |> List.enum |> Enum.map (fun ({lit;sign},clause) -> (lit,clause)) |> Set.of_enum
+  in
 
   let rename = fun x -> Var (x-1) in
   let dename = fun x -> Var (if x mod 2 = 0 then x+1 else x) in
 
   (* Tries to unify a and b *)
-  let try_unify (a: 'a literal) (b: 'a literal) =
+  let try_unify_lits (a: 'a literal) (b: 'a literal) =
     let b = subst_literal rename b in
 
     if dbg_flag then begin
@@ -104,7 +141,7 @@ let instgen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset op
     let {sign=bsign; lit=Pred(bname, bargs)} = b in
 
     (* Potentially unifiable if: same name, opposite sign *)
-    if aname == bname && asign <> bsign then
+    if aname = bname && asign <> bsign then  (* WAS== *)
       (* And if unification succeeds *)
       try
         let subst = Unification.mgu_list (List.combine aargs bargs) in
@@ -113,6 +150,17 @@ let instgen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset op
       | Failure _ -> None
     else
       None
+  in
+
+  let try_unify_atoms a b =
+    let b = subst_atom rename b in
+    let Pred(_, aargs) = a in
+    let Pred(_, bargs) = b in    
+    try
+      let subst = Unification.mgu_list (List.combine aargs bargs) in
+      Some subst
+    with
+    | Failure _ -> None
   in
 
   (** New clauses from clauses a and b and substitution subst *)
@@ -132,42 +180,88 @@ let instgen (formula: 'a clauseset) (assignments: passignment) : 'a clauseset op
     end;
     List.filter (fun x ->
       if dbg_flag then begin
-      debug_endline @@ string_of_int_clause x;
-      if List.mem x l then
-        (debug_endline "exists"; false)
-      else
-        (debug_endline "new"; true)
+        debug_endline @@ string_of_int_clause x;
+        if List.mem x l then
+          (debug_endline "exists"; false)
+        else
+          (debug_endline "new"; true)
       end else begin
-      not $ List.mem x l
+        not $ List.mem x l
       end;
     ) c
   in
 
-  let new_clauses = 
+  if dbg_flag then begin
+    debug_endline "Selecteds:";
+    List.iter (fun (lit,clause) -> debug_endline @@ string_of_int_literal lit ^ " /in/ " ^ string_of_int_clause clause) selecteds;
+    debug_endline "Selecteds_set:";
+    Set.iter (fun (atom,clause) -> debug_endline @@ string_of_int_atom atom ^ " /in/ " ^ string_of_int_clause clause) selecteds_set;
+    debug_newline();
+  end;
+
+  begin try
     let open Option.Infix in
-    pairs formula
-    (* |> Seq.to_list |> List.shuffle |> Seq.of_list (* Randomize *) *)
-    |> Seq.map (
-      fun (a,i,b,j) -> 
+    (* Grab list of selecteds *)
+    selecteds (* |> List.rev *)
+    (* For each clause, grab the selected literal *)
+    |> List.find_map (fun (lit,clause) ->
       if dbg_flag then begin
-      debug_int i; debug_string "/"; debug_int j; debug_newline();
+        debug_endline @@ "> " ^ string_of_int_literal lit ^ " /in/ " ^ string_of_int_clause clause
       end;
-      let subst = try_unify a b in (* Try to unify *)
-      begin match subst with Some subst -> Some (i,j,subst) | None -> None end (* If successful return clause indices and substitution *)
-      >>= fun (i,j,subst) ->
-      let a = List.at formula i in
-      let b = List.at formula j in
-      let n = make_new_clauses a b subst in (* Build new clauses *)
-      let n = remove_redundant n formula in (* Remove redundant clauses *)
-      if List.is_empty n then None else Some n (* Unless all clauses were redundant, return success *)
+      (* Find unifiable candidates *)
+      let (candidates: ('a literal * 'a clause) list) = Trie.unifiable trie lit in
+      if dbg_flag then (
+        debug_endline @@ Int.to_string (List.length candidates) ^ " candidates:";
+        List.iter (debug_endline % string_of_int_literal % fst) candidates;
+        debug_endline "End.";
+      );
+      (* Find candidate that has: different clause; selected; syntactic unifiability*)
+      begin try
+        candidates
+        |> List.find_map (fun (lit',clause') -> 
+          begin 
+            if dbg_flag then (debug_endline @@ ">   " ^ string_of_int_literal lit' ^ " /in/ " ^ string_of_int_clause clause');
+            if clause == clause' || clause = clause' then (
+              if dbg_flag then (debug_endline "[same clause]");
+              None
+            (* ) else if not (Set.mem (lit',clause') selecteds_set) then ( *)
+            ) else if not (List.exists (fun (lit'',clause'') -> lit'' == lit' && clause'' == clause') selecteds) then (
+              if dbg_flag then (debug_endline "[not selected]");
+              None            
+            ) else (
+              let subst = try_unify_lits lit lit' in
+              (* debug_endline "fooo"; *)
+              match subst with
+              | Some x -> (
+                if dbg_flag then (debug_endline "gtg");
+                Some (clause, clause', x)
+              )
+              | None -> (
+                if dbg_flag then (debug_endline "[not unifiable]");
+                None
+              )
+            ) 
+          end
+
+          (* Build new clauses and check if redundant *)
+          >>= (fun (a,b,subst) ->
+            (* if dbg_flag then (debug_endline @@ "foooooo"); *)
+            let n = make_new_clauses a b subst in (* Build new clauses *)
+            if dbg_flag then (debug_endline @@ "New clauses: " ^ string_of_int_clauseset n);
+            let n = remove_redundant n formula in (* Remove redundant clauses *)
+            if List.is_empty n then None else Some n (* Unless all clauses were redundant, return success *)
+          )
+        )
+        |> Option.some
+        (* |> tap (fun _ -> debug_endline "foo") *)
+      with
+      | Not_found -> (if dbg_flag then (debug_endline "[[not_found]]"); None)
+      end
     )
-    |> Seq.find Option.is_some 
-  in
-  (* Option.get new_clauses *)
-  match new_clauses with 
-  | Some x -> x
-  | None -> None
-    
+  |> Option.some
+  with Not_found -> None
+  end
+
 
 
 (* Main loop *)
@@ -189,7 +283,21 @@ let main_loop (l: 'a clauseset) : bool =
   debug_string "Designated: "; debug_int designated; debug_newline()
   end;
 
-  let rec loop it l =
+  (* Initial insertion of terms into trie *)
+  let trie : int trie = Trie.create() in
+  let add_clauseset_to_trie (trie: 'a trie) (l: 'a clauseset) : 'a trie = 
+    let trie = ref trie in
+    List.iter (fun clause ->
+      List.iter (fun lit -> 
+        if dbg_flag then (debug_endline @@ "Adding " ^ string_of_int_literal lit);
+        trie := Trie.insert !trie lit (lit,clause)
+      ) clause
+    ) l;
+    !trie
+  in
+  let trie = add_clauseset_to_trie trie l in
+
+  let rec loop it l trie =
     print_string @@ "\rIt: " ^ string_of_int it; flush stdout;
 
     if dbg_flag then begin
@@ -200,7 +308,7 @@ let main_loop (l: 'a clauseset) : bool =
 
     match check_prop_satisfiability designated l with
     | Some assignments -> (
-      let new_clauses = instgen l assignments in
+      let new_clauses = instgen l assignments trie in
       match new_clauses with
       | Some x -> (
         if dbg_flag then begin
@@ -208,7 +316,10 @@ let main_loop (l: 'a clauseset) : bool =
         debug_endline @@ string_of_int_clauseset x;
         debug_endline "End.\n";
         end;
-        loop (succ it) (l @ x)
+        (* Add new clauses to clauseset and new terms to trie *)
+        (* let trie' = add_clauseset_to_trie trie x in *)
+        (* let l' = l @ x in *)
+        loop (succ it) (l @ x) (add_clauseset_to_trie trie x)
       )
       | None -> (
         if dbg_flag then begin
@@ -226,4 +337,4 @@ let main_loop (l: 'a clauseset) : bool =
   in
 
   print_newline();
-  loop 0 l
+  loop 0 l trie

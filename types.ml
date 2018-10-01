@@ -48,11 +48,13 @@ let string_of_clauseset x =
 let string_of_int_atom x =
   let rec string_of_int_term x = 
     match x with
-    | Var x -> "V" ^ BatInt.to_string x
+    | Var x -> "v" ^ BatInt.to_string (-x)
+    | Func (name, []) -> "(F" ^ BatInt.to_string name ^ ")"
     | Func (name, args) -> "(F" ^ BatInt.to_string name ^ " " ^ String.concat " " (List.map string_of_int_term args) ^ ")"
   in
-  let Pred (name, args) = x in
-  "(P" ^ BatInt.to_string name ^ " " ^ String.concat " " (List.map string_of_int_term args) ^ ")"
+  match x with
+  | Pred (name, []) -> "(P" ^ BatInt.to_string name ^ ")"
+  | Pred (name, args) -> "(P" ^ BatInt.to_string name ^ " " ^ String.concat " " (List.map string_of_int_term args) ^ ")"
 
 let string_of_int_literal {sign;lit} =
   (if sign then "" else "~") ^ string_of_int_atom lit

@@ -141,15 +141,6 @@ let prop_numbering (x: 'a clauseset) : int List.t List.t * (int*int) =
 
 (* let numbering_to_pcnf (x: int List.t List.t * (int*int)) : string = *)
 let numbering_to_pcnf ((clauses,(nvars,nclauses)): int List.t List.t * (int*int)) : string =
-(*   let body = ref "" in
-  List.iter (fun clause ->
-    List.iter (fun n -> 
-      body := !body ^ Int.to_string n ^ " "
-    ) clause;
-    body := !body ^ "0\n"
-  ) clauses;
-  let header = "p cnf " ^ Int.to_string nvars ^ " " ^ Int.to_string nclauses ^ "\n" in
-  header ^ !body *)
   let body = Buffer.create ((nvars * 4) * nclauses) in
   Buffer.add_string body "p cnf ";
   Buffer.add_string body (Int.to_string nvars);
@@ -207,7 +198,53 @@ let call_sat_solver (str: string) : pmodel option =
   if dbg_flag then begin
   debug_endline sat;
   end;
-  if sat.[0] == 'S' then (
+  if sat.[0] = 'S' then (  (* WAS== *)
+    if dbg_flag then begin
+    debug_string model
+    end;
+    Some (process_model model)
+  ) else
+    None
+
+let call_sat_solver (str: string) : pmodel option =
+  if dbg_flag then begin  
+  debug_endline "FILE";
+  debug_string str;
+  debug_endline "ENDFILE";
+  end;
+  let fin = File.open_out "sattmp.in" in
+  IO.nwrite fin str;
+  IO.close_out fin;
+  let out_chan = Unix.open_process_in "./minisat sattmp.in sattmp.out" in
+  ignore @@ IO.read_all out_chan;
+  let fout = File.open_in "sattmp.out" in
+  let sat   = IO.read_line fout in
+  let sat   = sat.[0] = 'S' in
+  let model = if sat then IO.read_line fout else "" in
+  IO.close_in fout;
+
+  let process_model s =
+    let l = String.split_on_char ' ' s |> List.map String.trim |> List.filter (neg String.is_empty) in
+    let a = Array.make (List.length l) false in
+    List.iter (fun x ->
+      try
+        let x = Int.of_string x in
+        if x <> 0 then (
+          let sign = x>0 in
+          let lit = abs(x) in
+          a.(lit-1) <- sign
+        )
+      with Failure _ ->
+        ()
+    ) l;
+    a
+  in
+
+  if dbg_flag then begin
+  debug_endline @@ if sat then "SAT" else "UNSAT";
+  end;
+  (* if sat.[0] = 'S' then (  (* WAS== *) *)
+  if sat then (
     if dbg_flag then begin
     debug_string model
     end;
