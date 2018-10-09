@@ -42,3 +42,8 @@ let mgu_list x =
   (reduce @@ unify Map.empty x) |> map_to_func
 
 let mgu x = mgu_list @@ List.singleton x
+
+let mgu_list_map x =
+  reduce @@ unify Map.empty x
+
+let mgu_map x = mgu_list_map [x]

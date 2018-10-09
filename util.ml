@@ -355,7 +355,7 @@ let encode_clauseset (x: string clauseset) : int clauseset =
     r
   ) x
 
-let reencode_clauseset (x: int clauseset) : int clauseset =
+let reencode_clause (clause: int clause) : int clause =
   let table_var = ref Map.empty in
   let num_var = ref (-1) in
 
@@ -385,11 +385,29 @@ let reencode_clauseset (x: int clauseset) : int clauseset =
     Pred (name, List.map encode_term args)
   in
 
-  List.map (fun clause ->
-    let r = List.map (fun {sign;lit} -> 
-      {sign; lit = encode_atom lit}
-    ) clause in
-    table_var := Map.empty;
-    num_var := -1;
-    r
-  ) x
+  List.map (fun {sign;lit} -> 
+    {sign; lit = encode_atom lit}
+  ) clause
+    
+let reencode_clauseset (x) = 
+  List.map reencode_clause x
+
+
+
+let string_of_int_subst (s: (int, int term) Map.t) =
+  let pair_to_string (a,b) = 
+    Int.to_string a ^ "/" ^ string_of_int_term b
+  in
+  String.concat ", " (List.of_enum @@ map pair_to_string (Map.enum s))
+
+let rec list_vars_term x =
+  match x with
+  | Var y -> Enum.singleton y
+  | Func (_, args) -> Enum.concat_map list_vars_term (List.enum args)
+
+let list_vars_literal {lit} =
+  match lit with
+  | Pred (_, args) -> Enum.concat_map list_vars_term (List.enum args)
+
+let list_vars_clause x =
+  Enum.concat_map list_vars_literal (List.enum x)

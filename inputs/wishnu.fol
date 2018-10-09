@@ -1,0 +1,2 @@
+(\x. x = f(g(x)) & @xx. ~(xx = f(g(xx))) | x = xx) ==
+(\y. y = g(f(y)) & @yy. ~(yy = g(f(yy))) | y = yy)

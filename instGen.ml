@@ -29,19 +29,29 @@ let check_prop_satisfiability (elem: 'a) (x: 'a clauseset) : passignment option 
 (* --- *)
 
 type clause_i = {
-  clause: int clause;
+  l: int clause;
 }
 
 type clauseset_i = {
-  clauseset: int clauseset;
+  l: int clauseset;
 }
 
 module Trie = Trie.Literal
 type 'a trie = ('a literal * 'a clause) Trie.t
 
+type passive = {
+  l: int clause list;
+}
+
+type active = {
+  l: (int literal * int clause) list;
+}
+
 type instgen_state = {
-  formula: clauseset_i;
-  trie: int trie;
+  mutable formula: clauseset_i;
+  mutable trie: int trie;
+  mutable passive: passive;
+  mutable active: active;
 }
 
 (* --- *)
@@ -51,7 +61,8 @@ type instgen_state = {
  * Find them and apply to clauses where they appear
  * If not found return None
  *)
-let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) : 'a clauseset option =
+(* Returns true if saturated, otherwise false *)
+let rec instgen (s: instgen_state) (assignments: passignment) : bool =
   (* (
     if dbg_flag then begin
     List.iter (fun x ->
@@ -63,8 +74,19 @@ let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) :
     end;
   ); *)
 
+  if dbg_flag then (
+    debug_newline();
+
+    debug_endline "Formula:";
+    s.formula.l |> List.iter (fun x -> debug_endline @@ "  " ^ string_of_int_clause x);
+    debug_endline "Active:";
+    s.active.l |> List.iter (fun (l,x) -> debug_endline @@ "  " ^ string_of_int_clause x ^ " [" ^ string_of_int_literal l ^ "]");
+    debug_endline "Passive:";
+    s.passive.l |> List.iter (fun x -> debug_endline @@ "  " ^ string_of_int_clause x);
+  );
+
   (** Return lazylist of potentially unifiable literals *)
-  let pairs (l: 'a clauseset) : ('a literal * int * 'a literal * int) Seq.t =
+  (* let pairs (l: 'a clauseset) : ('a literal * int * 'a literal * int) Seq.t =
     let ret = ref Seq.nil in
 
     let selecteds : int list = 
@@ -86,12 +108,11 @@ let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) :
       ) (List.drop (i+1) l) (List.drop (i+1) selecteds)
     ) l selecteds;
     !ret
-  in
+  in *)
 
   (** Return list of selected literals *)
-  let selecteds : ('a literal * 'a clause) List.t =
+  (* let selecteds : ('a literal * 'a clause) List.t =
     let ret = ref [] in
-
 
     let selecteds' : int list = 
       if not dbg_flag then (
@@ -118,17 +139,53 @@ let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) :
       ret := (List.at clause ii, clause) :: !ret
     ) formula selecteds';
     !ret
+  in *)
+
+  (** Return list of selected literals *)
+  let selecteds_map : (int clause, int literal) Map.t =
+    let ret = ref Map.empty in
+
+    (* let selecteds' : int list = 
+      if not dbg_flag then (
+        List.map (List.index_of true %> Option.get) assignments
+      ) else (
+        debug_endline "Iteration";
+        List.map (fun c -> 
+          List.index_of true c |> Option.get
+          |> tap (fun x -> debug_int x; debug_newline())
+        ) assignments
+        |> tap (fun _ -> debug_endline "Finding unifiables...")
+      )
+    in *)
+
+    (* debug_endline "Iteration";
+    List.iter (fun x -> debug_int x; debug_newline()) selecteds';
+    debug_newline();
+    debug_endline "Finding unifiables...";
+    end; *)
+
+    List.iter2 (fun clause assignment ->
+      (* ret := Map.add clause (List.at clause ii) !ret *)
+      let rec loop clause' assignment' = 
+        match clause', assignment' with
+        | lit::xs, true::ys -> lit
+        | lit::xs, false::ys -> loop xs ys
+        | [],_ | _,[] -> failwith "selecteds_map:loop: should not happen"
+      in
+      ret := Map.add clause (loop clause assignment) !ret
+    ) s.formula.l assignments;
+    !ret
   in
 
-  let selecteds_set : ('a atom * 'a clause) Set.t = 
+  (* let selecteds_set : ('a atom * 'a clause) Set.t = 
     selecteds |> List.enum |> Enum.map (fun ({lit;sign},clause) -> (lit,clause)) |> Set.of_enum
-  in
+  in *)
 
   let rename = fun x -> Var (x-1) in
   let dename = fun x -> Var (if x mod 2 = 0 then x+1 else x) in
 
   (* Tries to unify a and b *)
-  let try_unify_lits (a: 'a literal) (b: 'a literal) =
+  (* let try_unify_lits (a: 'a literal) (b: 'a literal) =
     let b = subst_literal rename b in
 
     if dbg_flag then begin
@@ -150,7 +207,7 @@ let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) :
       | Failure _ -> None
     else
       None
-  in
+  in *)
 
   let try_unify_atoms a b =
     let b = subst_atom rename b in
@@ -163,46 +220,227 @@ let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) :
     | Failure _ -> None
   in
 
+  let try_unify_atoms_map a b =
+    let b = subst_atom rename b in
+    let Pred(_, aargs) = a in
+    let Pred(_, bargs) = b in    
+    try
+      let subst = Unification.mgu_list_map (List.combine aargs bargs) in
+      Some subst
+    with
+    | Failure _ -> None
+  in
+
+  (* let is_inference_redundant (premise: int clause) (conclusion: int clause) subst (set: int clauseset) =
+    if dbg_flag then (
+      debug_endline @@ "    Testing " ^ string_of_int_clause conclusion;
+      debug_endline @@ "    With subst: " ^ string_of_int_subst subst;
+    );
+    let proper_instantiator subst cls = 
+      (* Enum.filter_map (function (_, Var _) -> false | _ -> true) (Map.values subst) *)
+      let vars_relevant = List.of_enum @@ Enum.filter_map (function (_, Var _) -> None | (x, Func _) -> Some x) (Map.enum subst) in
+      let vars_cls = list_vars_clause cls in
+      vars_cls |> Enum.exists (fun x -> List.mem x vars_relevant)
+    in
+    proper_instantiator subst premise && List.mem conclusion set
+  in *)
+
   (** New clauses from clauses a and b and substitution subst *)
-  let make_new_clauses (a: 'a clause) (b: 'a clause) subst : 'a clauseset = 
+  (* make_new_clauses (a: 'a clause) (b: 'a clause) subst : 'a clauseset = 
     let clause_a = subst_clause subst (a) in
     let clause_b = subst_clause (rename %> (fun (Var x) -> subst x)) b in
 
     (* let clause_a = subst_clause dename clause_a in
     let clause_b = subst_clause dename clause_b in *)
     Util.reencode_clauseset (if clause_a = clause_b then [clause_a] else [clause_a; clause_b])
+  in *)
+  let make_new_clauses (a: 'a clause) (b: 'a clause) subst (set: 'a clauseset) : 'a clauseset = 
+    let subst_func = Unification.map_to_func subst in
+
+    let vars_relevant = List.of_enum @@ Enum.filter_map (function (_, Var _) -> None | (x, Func _) -> Some x) (Map.enum subst) in
+    let proper_instantiator cls relevant =
+      list_vars_clause cls |> Enum.exists (fun x -> List.mem x relevant)
+    in
+
+    let a' = subst_clause subst_func a |> Util.reencode_clause in
+    let proper_a = proper_instantiator a vars_relevant in
+    let existing_a = List.mem a' set in
+    if existing_a && proper_a then (
+      if dbg_flag then (debug_endline "Redundant inference");
+      []
+    ) else (
+      let b' = subst_clause (rename %> (fun (Var x) -> subst_func x)) b |> Util.reencode_clause in
+      let proper_b = proper_instantiator b vars_relevant in
+      let existing_b = List.mem b' set in
+      if existing_b && proper_b then (
+        if dbg_flag then (debug_endline "Redundant inference");
+        []
+      ) else (
+        match existing_a, existing_b with
+        | true , true  -> []
+        | false, true  -> [a']  (* REEE *)
+        | true , false -> [b']  (* REEE *)
+        | false, false -> if a' = b' then [a'] else [a';b']
+      )
+    )
   in
 
   (** Filters clauses in c that are redundant in l *)
-  let remove_redundant (c: 'a clauseset) (l: 'a clauseset) =
+  (* let remove_redundant (c: 'a clauseset) (l: 'a clauseset) =
     if dbg_flag then begin
     debug_endline "testing";
     end;
     List.filter (fun x ->
-      if dbg_flag then begin
+      if dbg_flag then (
         debug_endline @@ string_of_int_clause x;
         if List.mem x l then
           (debug_endline "exists"; false)
         else
           (debug_endline "new"; true)
-      end else begin
+      ) else (
         not $ List.mem x l
-      end;
+      )
     ) c
-  in
+  in *)
+
+  (** Tells you if any clause in c is redundant in l *)
+  (* let any_is_redundant c l =
+    List.exists (fun x -> List.mem x l) c
+  in *)
+
 
   if dbg_flag then begin
-    debug_endline "Selecteds:";
+    (* debug_endline "Selecteds:";
     List.iter (fun (lit,clause) -> debug_endline @@ string_of_int_literal lit ^ " /in/ " ^ string_of_int_clause clause) selecteds;
     debug_endline "Selecteds_set:";
     Set.iter (fun (atom,clause) -> debug_endline @@ string_of_int_atom atom ^ " /in/ " ^ string_of_int_clause clause) selecteds_set;
-    debug_newline();
+    debug_newline(); *)
   end;
 
-  begin try
+  (* Given clause algorithm:
+     - Grab first clause from passive
+     - Perform all inferences with all clauses in active
+     - If in any inference it is found that selection has changed, put that into passive
+     - If any inferences were made, good, put 
+     - Else, put anyways but do another inst-gen loop
+     - If passive is empty, it is saturated
+   *)
+
+  let select_given_clause l : int clause * int clause list = 
+    (* List.hd l *)
+    match l with
+    | x::xs -> (x, xs)
+    | [] -> invalid_arg "select_given_clause: nonempty list"
+  in
+
+  (* If passive is empty, it is saturated *)
+  if List.is_empty s.passive.l then (
+    true
+  ) 
+
+  else (
+    let given_clause, rest = select_given_clause s.passive.l in
+    s.passive <- {l = rest};
+    let given_lit = Map.find given_clause selecteds_map in
+    if dbg_flag then (debug_endline @@ "Given clause: " ^ string_of_int_clause given_clause ^ " [" ^ string_of_int_literal given_lit ^ "]");
+
+    let candidates = Trie.unifiable s.trie given_lit in
+    let new_clauses = 
+      candidates
+      (* |> List.filter_map (fun ((candidate_lit, candidate_clause) as foo) -> *)
+      |> List.filter_map (fun (candidate_lit, candidate_clause) ->
+        if dbg_flag then (
+          debug_string @@ Printf.sprintf "  Candidate: %s [%s] " (string_of_int_clause candidate_clause) (string_of_int_literal candidate_lit)
+        );
+
+        (* Check if in active *)
+        (* match List.find (foo) s.active.l with *)
+        match List.find_opt (fun (_,c) -> c = candidate_clause) s.active.l with
+        | None -> (
+          if dbg_flag then (debug_endline "NOT ACTIVE");
+          None
+        )
+        | Some ((lit', clause') as foo') -> (
+          let selection_lit = Map.find candidate_clause selecteds_map in
+          (* Unselected *)
+          if selection_lit <> candidate_lit then (
+            if dbg_flag then (debug_endline "NOT SELECTED");
+            None
+          )
+          (* Selection changed *)
+          else if selection_lit <> lit' then (
+            (* Move clause to passive *)
+            if dbg_flag then (debug_endline "SEL CHANGED");
+            s.active <- {l = List.remove s.active.l (foo')};
+            s.passive <- {l = clause' :: s.passive.l};
+            None
+          )
+          (* Selection ok, do inference *)
+          else (
+            (* let subst = try_unify_atoms given_lit.lit candidate_lit.lit |> Option.get in *)
+            match try_unify_atoms_map given_lit.lit candidate_lit.lit with
+            | Some subst -> (
+              if dbg_flag then (debug_newline());
+              (* let n = make_new_clauses given_clause candidate_clause (Unification.map_to_func subst) in *)
+              let n = make_new_clauses given_clause candidate_clause subst s.formula.l in
+              (* if any_is_redundant n s.formula.l then ( *)  
+              (* if List.exists2 (fun x y -> is_inference_redundant x y subst s.formula.l) n [given_clause; candidate_clause] then ( *)
+              (* if List.exists2 (fun x y -> is_inference_redundant x y subst s.formula.l) [given_clause; candidate_clause] n then (
+                if dbg_flag then (debug_endline "SOME REDUNDANT CONCLUSION");
+                None
+              ) else *) (
+                if dbg_flag then (debug_endline "ACCEPTED");
+                Some n
+              )
+              (* let n = remove_redundant n s.formula.l in
+              if dbg_flag then (debug_endline "ACCEPTED");
+              Some n    *)           
+            )
+            | None -> (
+              if dbg_flag then (debug_endline "NONUNIFIABLE");
+              None
+            )
+          )
+        )
+
+      )
+      |> List.concat
+    in
+    s.active <- {l = (given_lit, given_clause) :: s.active.l};
+    match new_clauses with
+    | [] -> instgen s assignments
+    | new_clauses -> (
+      if dbg_flag then (
+        debug_endline "New clauses:";
+        List.iter (fun x -> debug_endline @@ string_of_int_clause x) new_clauses;
+        debug_endline "End.";
+      );
+
+      let new_clauses = List.sort_unique compare new_clauses in
+
+      if dbg_flag then (
+        debug_endline "New clauses:";
+        List.iter (fun x -> debug_endline @@ string_of_int_clause x) new_clauses;
+        debug_endline "End.";
+      );
+
+      s.formula <- {l = s.formula.l @ new_clauses};
+      s.passive <- {l = s.passive.l @ new_clauses};
+      new_clauses |> List.iter (fun cls ->
+        cls |> List.iter (fun lit ->
+          s.trie <- Trie.insert s.trie lit (lit,cls) (* Move / nah its ok *)
+        )
+      );
+      false
+    )
+  )
+
+
+
+  (* begin try
     let open Option.Infix in
     (* Grab list of selecteds *)
-    selecteds (* |> List.rev *)
+    selecteds (* |> List.rev *) |> List.shuffle
     (* For each clause, grab the selected literal *)
     |> List.find_map (fun (lit,clause) ->
       if dbg_flag then begin
@@ -260,7 +498,7 @@ let instgen (formula: 'a clauseset) (assignments: passignment) (trie: 'a trie) :
     )
   |> Option.some
   with Not_found -> None
-  end
+  end *)
 
 
 
@@ -296,45 +534,44 @@ let main_loop (l: 'a clauseset) : bool =
     !trie
   in
   let trie = add_clauseset_to_trie trie l in
+  let state = {
+    formula = {l = l};
+    trie = trie;
+    active = {l = []};
+    passive = {l = l};
+  }
+  in
 
-  let rec loop it l trie =
+  let rec loop it state =
     print_string @@ "\rIt: " ^ string_of_int it; flush stdout;
 
     if dbg_flag then begin
-    debug_endline "Current clauses:";
+    debug_endline @@ "It: " ^ string_of_int it;
+    (* debug_endline "Current clauses:";
     debug_endline @@ string_of_int_clauseset l;
-    debug_endline "End.\n";
+    debug_endline "End.\n"; *)
     end;
 
-    match check_prop_satisfiability designated l with
+    (* match check_prop_satisfiability designated l with *)  (* OOPS *)
+    match check_prop_satisfiability designated (state.formula.l) with
     | Some assignments -> (
-      let new_clauses = instgen l assignments trie in
-      match new_clauses with
-      | Some x -> (
-        if dbg_flag then begin
-        debug_endline "More clauses added:"; 
-        debug_endline @@ string_of_int_clauseset x;
-        debug_endline "End.\n";
-        end;
-        (* Add new clauses to clauseset and new terms to trie *)
-        (* let trie' = add_clauseset_to_trie trie x in *)
-        (* let l' = l @ x in *)
-        loop (succ it) (l @ x) (add_clauseset_to_trie trie x)
-      )
-      | None -> (
-        if dbg_flag then begin
-        debug_endline "None unifiable: saturated."; 
-        end;
+      let saturated = instgen state assignments in
+      if not saturated then (
+        loop (succ it) (state)
+      ) else (
+        if dbg_flag then (
+          debug_endline "None unifiable: saturated."; 
+        );
         true
       )
     )
     | None -> (
-      if dbg_flag then begin
-      debug_endline "Prop solver returned unsat."; 
-      end;
+      if dbg_flag then (
+        debug_endline "Prop solver returned unsat."; 
+      );
       false
     )
   in
 
   print_newline();
-  loop 0 l trie
+  loop 0 state
