@@ -14,14 +14,14 @@ let contig_vars n =
 let axioms' (preds: (string * int) list) (funcs: (string * int) list) : string clauseset =
   (* Equality axiom for a function *)
   let axiom_func ((name,arity): (string * int)) : string clause =
-    let f_left n = {sign=false; lit=Pred ("=", [
+    let f_left n = {sign=false; atom=Pred ("=", [
       Var ("x"^string_of_int n);
       Var ("y"^string_of_int n)
     ])} in
     let f_right x n = Var (x ^ string_of_int n) in
 
     let left = List.init arity f_left in
-    let right = {sign=true; lit=Pred ("=", [
+    let right = {sign=true; atom=Pred ("=", [
       Func (name, List.init arity (f_right "x"));
       Func (name, List.init arity (f_right "y"));
     ])} in
@@ -35,7 +35,7 @@ let axioms' (preds: (string * int) list) (funcs: (string * int) list) : string c
 
   (* Equality axiom for a predicate *)
   let axiom_pred ((name,arity): (string * int)) : string clause =
-    let f_left n = {sign=false; lit=Pred ("=", [
+    let f_left n = {sign=false; atom=Pred ("=", [
       Var ("x"^string_of_int n);
       Var ("y"^string_of_int n)
     ])} in
@@ -43,8 +43,8 @@ let axioms' (preds: (string * int) list) (funcs: (string * int) list) : string c
 
     let left = List.init arity f_left in
     let right = [
-      {sign=false; lit=Pred (name, List.init arity (f_right "x"))};
-      {sign=true;  lit=Pred (name, List.init arity (f_right "y"))};
+      {sign=false; atom=Pred (name, List.init arity (f_right "x"))};
+      {sign=true;  atom=Pred (name, List.init arity (f_right "y"))};
     ] in
 
     if dbg_flag then begin

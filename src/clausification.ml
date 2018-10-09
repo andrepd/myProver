@@ -113,8 +113,8 @@ let rec setify f =
   let rec clausify f = 
     match f with
     | Or (x,y) -> clausify x @ clausify y
-    |      Atom x  -> [{sign=true;  lit=x}]
-    | Not (Atom x) -> [{sign=false; lit=x}]
+    |      Atom x  -> [{sign=true;  atom=x}]
+    | Not (Atom x) -> [{sign=false; atom=x}]
     | _ -> failwith "Not in cnf"
   in
   match f with

@@ -6,14 +6,14 @@ let ($) = (@@)
 
 (* Conversion functions *)
 let lit_to_func x =
-  let {sign; lit=Pred(name, args)} = x in
+  let {sign; atom=Pred(name, args)} = x in
   let sign_name = if sign then "T" else "F" in
   Func(sign_name, [Func(name, args)])
 
 let func_to_lit x =
   let Func(sign_name, [Func(name, args)]) = x in
   let sign = sign_name = "T" in
-  {sign; lit=Pred(name, args)}
+  {sign; atom=Pred(name, args)}
 
 (* Helper function *)
 module ListEx = struct
@@ -33,7 +33,7 @@ module List = ListEx
 (* --- *)
 
 (* 
-{sign=false; lit=Pred('P',[Func('a',[]);Func('b',[])])}
+{sign=false; atom=Pred('P',[Func('a',[]);Func('b',[])])}
 =>
 Func('$F',[Func('P',[Func('a',[]);Func('b',[])])])
 *)
@@ -195,13 +195,13 @@ module Literal = struct
     neg = Atom.create();
   }
 
-  let insert tree {sign;lit=atom} payload =
+  let insert tree {sign;atom=atom} payload =
     if sign then 
       {tree with pos = Atom.insert tree.pos atom payload}
     else
       {tree with neg = Atom.insert tree.neg atom payload}
 
-  let unifiable tree {sign;lit=atom} =
+  let unifiable tree {sign;atom=atom} =
     if sign then
       Atom.unifiable tree.neg atom
     else

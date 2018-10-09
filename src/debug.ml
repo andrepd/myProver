@@ -9,6 +9,8 @@ let debug_string  x = prerr_string  x (* (Lazy.force x)  *)
 let debug_newline() = prerr_newline()
 let debug_int     x = prerr_int     x (* (Lazy.force x)  *)
 
+let debug_printf = Printf.eprintf
+
 (* OR *)
 
 (* [%%define debug false]

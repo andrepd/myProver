@@ -1,5 +1,5 @@
-S .
+S src/
 
-B _build
+B _build/src
 
-PKG batteries
+PKG batteries angstrom

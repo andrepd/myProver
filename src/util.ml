@@ -66,8 +66,8 @@ let subst_atom (s: 'a -> 'a term) (f: 'a atom) =
   match f with
   | Pred (name, args) -> Pred (name, List.map (subst_term s) args)
 
-let subst_literal (s: 'a -> 'a term) ({sign; lit}: 'a literal) = 
-  {sign; lit=subst_atom s lit}
+let subst_literal (s: 'a -> 'a term) ({sign; atom}: 'a literal) = 
+  {sign; atom=subst_atom s atom}
 
 let subst_clause (s: 'a -> 'a term) (f: 'a clause) =
   List.map (subst_literal s) f
@@ -108,151 +108,9 @@ let rec subst_formula (s: 'a -> 'a term) (f: 'a formula) =
     )
   )
 
+
+
 (* --- *)
-
-(* let prop_numbering (x: 'a clauseset) : int LazyList.t LazyList.t * (int*int) = *)
-let prop_numbering (x: 'a clauseset) : int List.t List.t * (int*int) =
-  let store = ref @@ Map.empty in
-  let num = ref 1 in
-  
-  let clauses = 
-    List.map (fun clause ->
-      List.map (fun {sign;lit} -> 
-        let n =
-          try
-            Map.find lit !store
-          with
-            Not_found -> (
-              store := Map.add lit !num !store;
-              incr num;
-              !num-1
-            )
-        in
-        if sign then
-          n
-        else
-          -n
-      ) clause
-    ) x
-  in
-  let nvars = !num-1 in
-  let nclauses = List.length clauses in
-  (clauses,(nvars,nclauses))
-
-(* let numbering_to_pcnf (x: int List.t List.t * (int*int)) : string = *)
-let numbering_to_pcnf ((clauses,(nvars,nclauses)): int List.t List.t * (int*int)) : string =
-  let body = Buffer.create ((nvars * 4) * nclauses) in
-  Buffer.add_string body "p cnf ";
-  Buffer.add_string body (Int.to_string nvars);
-  Buffer.add_char   body (' ');
-  Buffer.add_string body (Int.to_string nclauses);
-  Buffer.add_char   body ('\n');
-  List.iter (fun clause ->
-    List.iter (fun n -> 
-      Buffer.add_string body (Int.to_string n);
-      Buffer.add_char body ' '
-    ) clause;
-    Buffer.add_string body "0\n"
-  ) clauses;
-  Buffer.contents body
-  
-
-let to_pcnf (x: 'a clauseset) : string =
-  x |> prop_numbering |> numbering_to_pcnf
-
-let call_sat_solver (str: string) : pmodel option =
-  if dbg_flag then begin  
-  debug_endline "FILE";
-  debug_string str;
-  debug_endline "ENDFILE";
-  end;
-  (* let in_descr = Unix.descr_of_in_channel @@ IO.input_string str in
-  let out_descr = Unix.descr_of_out_channel @@ IO.output_string () in
-  let pid = Unix.create_process "./sat" [||] in_descr out_descr Unix.stderr in *)
-  let out_chan, in_chan, err_chan = Unix.open_process_full "./sat" [||] in
-  IO.nwrite in_chan str;
-  IO.flush in_chan;
-  (* IO.read out_chan = 'S' *)
-  (* let sat = IO.nread out_chan (1024*4) in *)
-  let sat = IO.read_all out_chan in
-  (* let model = IO.nread err_chan (1024*4) in *)
-  let model = IO.read_all err_chan in
-  (* let status = Unix.close_process_full (out_chan, in_chan, err_chan) in *)
-
-  let process_model s =
-    let l = String.split_on_char ' ' s |> List.map String.trim |> List.filter (neg String.is_empty) in
-    (* debug_int (List.length l); *)
-    let a = Array.make (List.length l) false in
-    List.iter (fun x ->
-      try
-        let x = Int.of_string x in
-        let sign = x>0 in
-        let lit = abs(x) in
-        a.(lit-1) <- sign
-      with Failure _ ->
-        ()
-    ) l;
-    a
-  in
-
-  if dbg_flag then begin
-  debug_endline sat;
-  end;
-  if sat.[0] = 'S' then (  (* WAS== *)
-    if dbg_flag then begin
-    debug_string model
-    end;
-    Some (process_model model)
-  ) else
-    None
-
-let call_sat_solver (str: string) : pmodel option =
-  if dbg_flag then begin  
-  debug_endline "FILE";
-  debug_string str;
-  debug_endline "ENDFILE";
-  end;
-  let fin = File.open_out "sattmp.in" in
-  IO.nwrite fin str;
-  IO.close_out fin;
-  let out_chan = Unix.open_process_in "./minisat sattmp.in sattmp.out" in
-  ignore @@ IO.read_all out_chan;
-  let fout = File.open_in "sattmp.out" in
-  let sat   = IO.read_line fout in
-  let sat   = sat.[0] = 'S' in
-  let model = if sat then IO.read_line fout else "" in
-  IO.close_in fout;
-
-  let process_model s =
-    let l = String.split_on_char ' ' s |> List.map String.trim |> List.filter (neg String.is_empty) in
-    let a = Array.make (List.length l) false in
-    List.iter (fun x ->
-      try
-        let x = Int.of_string x in
-        if x <> 0 then (
-          let sign = x>0 in
-          let lit = abs(x) in
-          a.(lit-1) <- sign
-        )
-      with Failure _ ->
-        ()
-    ) l;
-    a
-  in
-
-  if dbg_flag then begin
-  debug_endline @@ if sat then "SAT" else "UNSAT";
-  end;
-  (* if sat.[0] = 'S' then (  (* WAS== *) *)
-  if sat then (
-    if dbg_flag then begin
-    debug_string model
-    end;
-    Some (process_model model)
-  ) else
-    None
-
-
 
 let rec list_functions_term (t: 'a term) : ('a * int) list =
   match t with
@@ -262,7 +120,7 @@ let rec list_functions_term (t: 'a term) : ('a * int) list =
 let list_functions_clauseset (x: 'a clauseset) : ('a * int) list =
   (* List.sort_unique compare @@ *)
   List.concat @@ List.map (
-    fun {sign;lit=Pred(_,args)} -> List.concat @@ List.map list_functions_term args  
+    fun {sign;atom=Pred(_,args)} -> List.concat @@ List.map list_functions_term args  
   ) (List.concat x)
 
 let list_functions_formula (x: 'a formula) : ('a * int) list =
@@ -282,7 +140,7 @@ let list_functions_formula (x: 'a formula) : ('a * int) list =
 let list_predicates_clauseset (x: 'a clauseset) : ('a * int) list =
   (* List.sort_unique compare @@ *)
   List.map (
-    fun {sign;lit=Pred(name,args)} -> (name, List.length args)
+    fun {sign;atom=Pred(name,args)} -> (name, List.length args)
   ) (List.concat x)
 
 let rec list_predicates_formula (f: 'a formula) : ('a * int) list =
@@ -347,8 +205,8 @@ let encode_clauseset (x: string clauseset) : int clauseset =
   in
 
   List.map (fun clause ->
-    let r = List.map (fun {sign;lit} -> 
-      {sign; lit = encode_atom lit}
+    let r = List.map (fun {sign;atom} -> 
+      {sign; atom = encode_atom atom}
     ) clause in
     table_var := Map.empty;
     num_var := -1;
@@ -385,8 +243,8 @@ let reencode_clause (clause: int clause) : int clause =
     Pred (name, List.map encode_term args)
   in
 
-  List.map (fun {sign;lit} -> 
-    {sign; lit = encode_atom lit}
+  List.map (fun {sign;atom} -> 
+    {sign; atom = encode_atom atom}
   ) clause
     
 let reencode_clauseset (x) = 
@@ -405,8 +263,8 @@ let rec list_vars_term x =
   | Var y -> Enum.singleton y
   | Func (_, args) -> Enum.concat_map list_vars_term (List.enum args)
 
-let list_vars_literal {lit} =
-  match lit with
+let list_vars_literal {atom} =
+  match atom with
   | Pred (_, args) -> Enum.concat_map list_vars_term (List.enum args)
 
 let list_vars_clause x =

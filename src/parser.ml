@@ -71,8 +71,8 @@ let parser_atom : (bool * string atom) t =
 
 let parser_lit : string literal t =
   eat_spaces *> 
-  parser_atom >>| fun (sign, lit) ->
-    {sign; lit}
+  parser_atom >>| fun (sign, atom) ->
+    {sign; atom}
 
 let parser_clause : string clause t =
   sep_by (eat_spaces *> char ',') parser_lit

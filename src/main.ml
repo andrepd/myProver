@@ -33,18 +33,18 @@ let test_cnf() =
   in
   print_endline @@ string_of_int designated;
   (* let prop_formula = prop_abstraction 0 encoded_formula in *)
-  let prop_formula = InstGen.prop_abstraction designated encoded_formula in
+  let prop_formula = Propositional.abstraction designated encoded_formula in
   print_endline @@ string_of_int_clauseset @@ prop_formula;
   print_newline();
   
-  print_endline @@ bold "pcnf text:";
+  (* print_endline @@ bold "pcnf text:";
   print_string @@ to_pcnf prop_formula;
-  print_newline();
+  print_newline(); *)
   
   print_endline @@ bold "Prop satisfiability of above:";
   (* let sat = check_prop_satisfiability 0 prop_formula in *)
   (* let sat = check_prop_satisfiability 0 encoded_formula in *)
-  let sat = InstGen.check_prop_satisfiability designated encoded_formula in
+  let sat = Propositional.satisfiable designated encoded_formula in
   print_endline @@ (match sat with Some _ -> "SAT" | None -> "UNSAT");
   print_newline();
 

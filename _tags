@@ -1,1 +1,2 @@
-<*>: package(batteries, angstrom, stdlib)
+true: package(batteries, angstrom, stdlib)
+

@@ -16,12 +16,9 @@ type 'a formula =
 	| Forall of 'a * 'a formula
 	| Exists of 'a * 'a formula
 
-type 'a literal = {sign: bool; lit: 'a atom}
+type 'a literal = {sign: bool; atom: 'a atom}
 type 'a clause = 'a literal list
 type 'a clauseset = 'a clause list
-
-type pmodel = bool array
-type passignment = bool list list
 
 
 
@@ -34,8 +31,8 @@ let string_of_atom x =
   let Pred (name, args) = x in
   "(P" ^ name ^ " " ^ String.concat " " (List.map string_of_term args) ^ ")"
 
-let string_of_literal {sign;lit} =
-  (if sign then "" else "~") ^ string_of_atom lit
+let string_of_literal {sign;atom} =
+  (if sign then "" else "~") ^ string_of_atom atom
 
 let string_of_clause x =
   String.concat " , " (List.map string_of_literal x)
@@ -56,8 +53,8 @@ let string_of_int_atom x =
   | Pred (name, []) -> "(P" ^ BatInt.to_string name ^ ")"
   | Pred (name, args) -> "(P" ^ BatInt.to_string name ^ " " ^ String.concat " " (List.map string_of_int_term args) ^ ")"
 
-let string_of_int_literal {sign;lit} =
-  (if sign then "" else "~") ^ string_of_int_atom lit
+let string_of_int_literal {sign;atom} =
+  (if sign then "" else "~") ^ string_of_int_atom atom
 
 let string_of_int_clause x =
   String.concat " , " (List.map string_of_int_literal x)
@@ -138,5 +135,5 @@ let rec prettyprint_of_formula f =
 
 
 
-(* let rec compare_lit {sign=s1;lit=l1} {sign=s2;lit=l2} : int =
+(* let rec compare_lit {sign=s1;atom=l1} {sign=s2;atom=l2} : int =
   s1 = s2 &&  *)
