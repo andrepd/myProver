@@ -1,81 +1,58 @@
-type 'a term = 
-	| Var of 'a
-	| Func of 'a * 'a term list
+open Batteries
 
-type 'a atom =
-	| Pred of 'a * 'a term list
+type 'a term = 'a Term.t =
+  | Var of 'a
+  | Func of 'a * 'a term list
 
-type 'a formula =
-	| Val of bool
-	| Atom of 'a atom
-  | Not of 'a formula (* Faltava *)
-	| And of 'a formula * 'a formula
-	| Or  of 'a formula * 'a formula
-	| Imp of 'a formula * 'a formula
-	| Iff of 'a formula * 'a formula
-	| Forall of 'a * 'a formula
-	| Exists of 'a * 'a formula
+type 'a atom = 'a Atom.t =
+  | Pred of 'a * 'a Term.t list
 
-type 'a literal = {sign: bool; atom: 'a atom}
-type 'a clause = 'a literal list
-type 'a clauseset = 'a clause list
+type 'a formula = 'a Formula.t =
+  | Val of bool
+  | Atom of 'a Atom.t
+  | Not of 'a formula
+  | And of 'a formula * 'a formula
+  | Or  of 'a formula * 'a formula
+  | Imp of 'a formula * 'a formula
+  | Iff of 'a formula * 'a formula
+  | Forall of 'a * 'a formula
+  | Exists of 'a * 'a formula
 
+type 'a literal = 'a Literal.t = 
+  {sign: bool; atom: 'a Atom.t}
 
+type 'a clause = 'a Clause.t
+  (* = 'a Literal.t list) *)
 
-let string_of_atom x =
-  let rec string_of_term x = 
-    match x with
-    | Var x -> "V"^x
-    | Func (name, args) -> "(F" ^ name ^ " " ^ String.concat " " (List.map string_of_term args) ^ ")"
-  in
-  let Pred (name, args) = x in
-  "(P" ^ name ^ " " ^ String.concat " " (List.map string_of_term args) ^ ")"
-
-let string_of_literal {sign;atom} =
-  (if sign then "" else "~") ^ string_of_atom atom
-
-let string_of_clause x =
-  String.concat " , " (List.map string_of_literal x)
-
-let string_of_clauseset x =
-  String.concat ";\n" (List.map string_of_clause x)
+type 'a clauseset = 'a Clauseset.t 
+  (* = 'a Clause.t list *)
 
 
+let string_of_term x = Term.to_string identity x
 
-let rec string_of_int_term x = 
-  match x with
-  | Var x -> "v" ^ BatInt.to_string (-x)
-  | Func (name, []) -> "(F" ^ BatInt.to_string name ^ ")"
-  | Func (name, args) -> "(F" ^ BatInt.to_string name ^ " " ^ String.concat " " (List.map string_of_int_term args) ^ ")"
+let string_of_atom x = Atom.to_string identity x
 
-let string_of_int_atom x =
-  match x with
-  | Pred (name, []) -> "(P" ^ BatInt.to_string name ^ ")"
-  | Pred (name, args) -> "(P" ^ BatInt.to_string name ^ " " ^ String.concat " " (List.map string_of_int_term args) ^ ")"
+let string_of_literal x = Literal.to_string identity x
 
-let string_of_int_literal {sign;atom} =
-  (if sign then "" else "~") ^ string_of_int_atom atom
+let string_of_clause x = Clause.to_string identity x
 
-let string_of_int_clause x =
-  String.concat " , " (List.map string_of_int_literal x)
-
-let string_of_int_clauseset x =
-  String.concat ";\n" (List.map string_of_int_clause x)
+let string_of_clauseset x = Clauseset.to_string identity x
 
 
+let string_of_int_term x = Term.to_string Int.to_string x
 
-let rec string_of_formula x =
-  match x with
-  | Val true -> "$T"
-  | Val false -> "$F"
-  | Atom x -> string_of_atom x
-  | Not x -> "(NOT " ^ string_of_formula x ^ ")"
-  | And (x,y) -> "(AND " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
-  | Or  (x,y) -> "(OR " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
-  | Imp (x,y) -> "(IMP " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
-  | Iff (x,y) -> "(IFF " ^ string_of_formula x ^ " " ^ string_of_formula y ^ ")"
-  | Forall (x, p) -> "(FORALL " ^ x ^ " " ^ string_of_formula p ^ ")"
-  | Exists (x, p) -> "(EXISTS " ^ x ^ " " ^ string_of_formula p ^ ")"
+let string_of_int_atom x = Atom.to_string Int.to_string x
+
+let string_of_int_literal x = Literal.to_string Int.to_string x
+
+let string_of_int_clause x = Clause.to_string Int.to_string x
+
+let string_of_int_clauseset x = Clauseset.to_string Int.to_string x
+
+
+let rec string_of_formula x = Formula.to_string identity x
+
+let rec string_of_int_formula x = Formula.to_string Int.to_string x
 
 
 

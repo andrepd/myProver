@@ -20,13 +20,13 @@ let test_cnf() =
   print_newline();
   
   print_endline @@ bold "Encoded formula:";
-  let encoded_formula = Util.encode_clauseset test_formula in
+  let encoded_formula = Clauseset.encode test_formula in
   print_endline @@ string_of_int_clauseset encoded_formula;
   print_newline();
 
   print_endline @@ bold "Propositional abstraction:";
   let designated = 
-    list_functions_clauseset encoded_formula
+    Clauseset.list_functions encoded_formula
     |> List.filter (fun x -> snd x = 0)
     |> List.shuffle
     |> List.hd |> fst
@@ -80,13 +80,17 @@ let test_formula() =
   
   print_endline @@ bold "Skolemized:";
   (* let skolem_formula = Clausification.skolemize (Not test_formula) in *)
-  let skolem_formula = Clausification.skolemize (test_formula) in
+  let skolem_formula = Clausification.skolemize_string (test_formula) in
   print_endline @@ string_of_formula skolem_formula;
   print_newline();
   
   print_endline @@ bold "CNF:";
   let cnf_formula = Clausification.clausify skolem_formula in
   print_endline @@ string_of_clauseset cnf_formula;
+  print_newline();
+  
+  print_endline @@ bold "TPTP-CNF:";
+  Clauseset.print_tptp String.print stdout cnf_formula;
   print_newline();
   
   print_endline @@ bold "Equality axioms:";
@@ -108,7 +112,7 @@ let test_formula() =
       cnf_formula
     )
   in
-  let sat = InstGen.main_loop @@ Util.encode_clauseset full_formula in
+  let sat = InstGen.main_loop @@ Clauseset.encode full_formula in
   print_endline @@ if sat then "FOL SAT" else "FOL UNSAT";
 
   ()

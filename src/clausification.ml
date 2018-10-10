@@ -2,6 +2,7 @@ open Batteries
 
 open Types
 open Util
+open Formula
 
 (* --- *)
 
@@ -30,54 +31,60 @@ let rec nnf f =
   | _ -> f
 
 (* Prenex normal form *)
-let rec pnf f = 
-  let rec aux f = 
+let pnf ~variant f =
+  let rec pnf' f = 
+    let rec aux f = 
+      match f with
+      | And (Forall (x,p) , Forall (y,q)) -> let z  = variant x $ free_vars f in Forall (z, aux $ And (subst ~variant (x |=> Var z) p , subst ~variant (y |=> Var z) q))
+      | Or  (Exists (x,p) , Exists (y,q)) -> let z  = variant x $ free_vars f in Exists (z, aux $ Or  (subst ~variant (x |=> Var z) p , subst ~variant (y |=> Var z) q))
+   
+      | And (Forall (x,p), q) ->             let x' = variant x $ free_vars f in Forall (x', aux $ And (subst ~variant (x |=> Var x') p , q))
+      | And (q, Forall (x,p)) ->             let x' = variant x $ free_vars f in Forall (x', aux $ And (q , subst ~variant (x |=> Var x') p))
+      | Or  (Forall (x,p), q) ->             let x' = variant x $ free_vars f in Forall (x', aux $ Or  (subst ~variant (x |=> Var x') p , q))
+      | Or  (q, Forall (x,p)) ->             let x' = variant x $ free_vars f in Forall (x', aux $ Or  (q , subst ~variant (x |=> Var x') p))
+   
+      | And (Exists (x,p), q) ->             let x' = variant x $ free_vars f in Exists (x', aux $ And (subst ~variant (x |=> Var x') p , q))
+      | And (q, Exists (x,p)) ->             let x' = variant x $ free_vars f in Exists (x', aux $ And (q , subst ~variant (x |=> Var x') p))
+      | Or  (Exists (x,p), q) ->             let x' = variant x $ free_vars f in Exists (x', aux $ Or  (subst ~variant (x |=> Var x') p , q))
+      | Or  (q, Exists (x,p)) ->             let x' = variant x $ free_vars f in Exists (x', aux $ Or  (q , subst ~variant (x |=> Var x') p))
+   
+      | _ -> f
+    in
     match f with
-    | And (Forall (x,p) , Forall (y,q)) -> let z  = variant x $ free_vars f in Forall (z, aux $ And (subst_formula (x |=> Var z) p , subst_formula (y |=> Var z) q))
-    | Or  (Exists (x,p) , Exists (y,q)) -> let z  = variant x $ free_vars f in Exists (z, aux $ Or  (subst_formula (x |=> Var z) p , subst_formula (y |=> Var z) q))
- 
-    | And (Forall (x,p), q) ->             let x' = variant x $ free_vars f in Forall (x', aux $ And (subst_formula (x |=> Var x') p , q))
-    | And (q, Forall (x,p)) ->             let x' = variant x $ free_vars f in Forall (x', aux $ And (q , subst_formula (x |=> Var x') p))
-    | Or  (Forall (x,p), q) ->             let x' = variant x $ free_vars f in Forall (x', aux $ Or  (subst_formula (x |=> Var x') p , q))
-    | Or  (q, Forall (x,p)) ->             let x' = variant x $ free_vars f in Forall (x', aux $ Or  (q , subst_formula (x |=> Var x') p))
- 
-    | And (Exists (x,p), q) ->             let x' = variant x $ free_vars f in Exists (x', aux $ And (subst_formula (x |=> Var x') p , q))
-    | And (q, Exists (x,p)) ->             let x' = variant x $ free_vars f in Exists (x', aux $ And (q , subst_formula (x |=> Var x') p))
-    | Or  (Exists (x,p), q) ->             let x' = variant x $ free_vars f in Exists (x', aux $ Or  (subst_formula (x |=> Var x') p , q))
-    | Or  (q, Exists (x,p)) ->             let x' = variant x $ free_vars f in Exists (x', aux $ Or  (q , subst_formula (x |=> Var x') p))
- 
+    | And (x,y) -> aux $ And (pnf' x , pnf' y)
+    | Or  (x,y) -> aux $ Or  (pnf' x , pnf' y)
+    | Forall (x, p) -> Forall (x, pnf' p)
+    | Exists (x, p) -> Exists (x, pnf' p)
     | _ -> f
   in
-  match f with
-  | And (x,y) -> aux $ And (pnf x , pnf y)
-  | Or  (x,y) -> aux $ Or  (pnf x , pnf y)
-  | Forall (x, p) -> Forall (x, pnf p)
-  | Exists (x, p) -> Exists (x, pnf p)
-  | _ -> f
+  pnf' f
 
 (* Skolemization *)
-let rec skolem (names: string list) f =
-  let aux names fn x y = 
-    let (names',  x') = skolem names  x in
-    let (names'', y') = skolem names' y in
-    (names'', fn x' y')
+let skolem ~variant names f =
+  let rec skolem' (names: string list) f =
+    let aux names fn x y = 
+      let (names',  x') = skolem' names  x in
+      let (names'', y') = skolem' names' y in
+      (names'', fn x' y')
+    in
+   
+    match f with 
+    | Exists (x, p) -> 
+      let v = free_vars f in
+      let name = variant (if List.is_empty v then "c_"^x else "f_"^x) names in
+      let func = Func (name, List.map (fun x -> Var x) v) in
+      skolem' (name::names) (subst ~variant (x |=> func) p)
+   
+    | Forall (x, p) -> 
+      let names', p' = skolem' names p in 
+      (names', Forall (x, p'))
+   
+    | And (x,y) -> aux names (fun x y -> And (x,y)) x y
+    | Or  (x,y) -> aux names (fun x y -> Or  (x,y)) x y
+   
+    | _ -> (names, f)
   in
- 
-  match f with 
-  | Exists (x, p) -> 
-    let v = free_vars f in
-    let name = variant (if List.is_empty v then "c_"^x else "f_"^x) names in
-    let func = Func (name, List.map (fun x -> Var x) v) in
-    skolem (name::names) (subst_formula (x |=> func) p)
- 
-  | Forall (x, p) -> 
-    let names', p' = skolem names p in 
-    (names', Forall (x, p'))
- 
-  | And (x,y) -> aux names (fun x y -> And (x,y)) x y
-  | Or  (x,y) -> aux names (fun x y -> Or  (x,y)) x y
- 
-  | _ -> (names, f)
+  skolem' names f
 
 (* Remove leading universal quantifiers *)
 let rec specialize f =
@@ -86,12 +93,15 @@ let rec specialize f =
   | _ -> f
 
 (* Skolemization *)
-let skolemize (f: 'a formula) : 'a formula =
+let skolemize ~variant (f: 'a formula) : 'a formula =
   (* f |> nnf |> skolem [] |> snd |> pnf |> specialize *)
-  f |> nnf |> skolem (List.map fst $ list_functions_formula f) |> snd |> pnf |> specialize
+  f |> nnf |> skolem ~variant (List.map fst $ list_functions f) |> snd |> pnf ~variant |> specialize
   (* |> tap (fun _ -> print_endline "---")
   |> tap (print_endline % prettyprint_of_formula)
   |> tap (fun _ -> print_endline "---"; print_newline()) *)
+
+(* Shortcuts *)
+let skolemize_string = skolemize ~variant:(Util.variant_string)
 
 
 

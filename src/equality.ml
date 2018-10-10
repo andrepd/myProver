@@ -68,9 +68,9 @@ let axioms' (preds: (string * int) list) (funcs: (string * int) list) : string c
         Atom (Pred ("=",[Var "y";Var "z"]))  
       )
     in
-    (Clausification.clausify $ Clausification.skolemize reflexivity)
+    (Clausification.clausify $ Clausification.skolemize_string reflexivity)
     @
-    (Clausification.clausify $ Clausification.skolemize transitivity)
+    (Clausification.clausify $ Clausification.skolemize_string transitivity)
   in
 
   let preds = List.filter (function ("=",2) -> false | _ -> true) preds in
@@ -88,17 +88,17 @@ let axioms' (preds: (string * int) list) (funcs: (string * int) list) : string c
 
 
 let axioms l =
-  let preds = list_predicates_clauseset l in
-  let funcs = list_functions_clauseset l in
+  let preds = Clauseset.list_predicates l in
+  let funcs = Clauseset.list_functions l in
   axioms' preds funcs
 
 (* let axioms_int l =
-  let preds = list_predicates_clauseset l in
-  let funcs = list_functions_clauseset l in
+  let preds = Clauseset.list_predicates l in
+  let funcs = Clauseset.list_functions l in
   axioms' preds funcs *)
 
 let has_equality f =
-  List.mem ("=",2) (list_predicates_clauseset f)
+  List.mem ("=",2) (Clauseset.list_predicates f)
 
 let add_axioms f = 
   axioms f @ f

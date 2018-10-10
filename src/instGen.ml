@@ -83,7 +83,7 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
 
   (* Tries to unify a and b *)
   let try_unify_lits (a: 'a literal) (b: 'a literal) =
-    let b = subst_literal rename b in
+    let b = Literal.subst rename b in
 
     if dbg_flag then begin
     debug_endline (string_of_int_literal a);
@@ -107,7 +107,7 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
   in
 
   let try_unify_atoms a b =
-    let b = subst_atom rename b in
+    let b = Atom.subst rename b in
     let Pred(_, aargs) = a in
     let Pred(_, bargs) = b in    
     try
@@ -118,7 +118,7 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
   in
 
   let try_unify_atoms_map a b =
-    let b = subst_atom rename b in
+    let b = Atom.subst rename b in
     let Pred(_, aargs) = a in
     let Pred(_, bargs) = b in    
     try
@@ -138,21 +138,22 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
     Util.reencode_clauseset (if clause_a = clause_b then [clause_a] else [clause_a; clause_b])
   in *)
   let make_new_clauses (a: 'a clause) (b: 'a clause) subst (set: 'a clauseset) : 'a clauseset = 
-    let subst_func = Unification.map_to_func subst in
+    let subst_func = Subst.map_to_func subst in
 
     let vars_relevant = List.of_enum @@ Enum.filter_map (function (_, Var _) -> None | (x, Func _) -> Some x) (Map.enum subst) in
     let proper_instantiator cls relevant =
-      list_vars_clause cls |> Enum.exists (fun x -> List.mem x relevant)
+      Clause.list_vars cls |> Enum.exists (fun x -> List.mem x relevant)
     in
 
-    let a' = subst_clause subst_func a |> Util.reencode_clause in
+    let a' = Clause.subst subst_func a |> Clause.reencode in
     let proper_a = proper_instantiator a vars_relevant in
     let existing_a = List.mem a' set in
     if existing_a && proper_a then (
       if dbg_flag then (debug_endline "Redundant inference");
       []
     ) else (
-      let b' = subst_clause (rename %> (fun (Var x) -> subst_func x)) b |> Util.reencode_clause in
+      (* let b' = Clause.subst (rename %> (fun (Var x) -> subst_func x)) b |> Clause.reencode in *)
+      let b' = Clause.subst Subst.(rename >=> subst_func) b |> Clause.reencode in
       let proper_b = proper_instantiator b vars_relevant in
       let existing_b = List.mem b' set in
       if existing_b && proper_b then (
@@ -234,7 +235,7 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
         );
 
         (* Check if in active *)
-        match List.find_opt (fun (_,c) -> c = candidate_clause) s.active.l with
+        match List.find_opt (fun (_,c) -> c == candidate_clause) s.active.l with
         | None -> (
           if dbg_flag then (debug_endline "NOT ACTIVE");
           None
@@ -244,13 +245,13 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
           let selection_lit = Map.find candidate_clause selecteds_map in
 
           (* Unselected *)
-          if selection_lit <> candidate_lit then (
+          if selection_lit != candidate_lit then (
             if dbg_flag then (debug_endline "NOT SELECTED");
             None
           )
 
           (* Selection changed *)
-          else if selection_lit <> lit' then (
+          else if selection_lit != lit' then (
             if dbg_flag then (debug_endline "SEL CHANGED");
             (* Move clause to passive *)
             s.active <- {l = List.remove s.active.l (foo')};
@@ -270,7 +271,7 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
             | None -> (
               (* debug_printf "%s %s" (string_of_int_atom given_lit.atom) (string_of_int_atom candidate_lit.atom);
               failwith "instgen: nonunifiable (should not happen)" *)
-              if dbg_flag then (debug_endline "NONUNIFIABLE (should not happen)");
+              if dbg_flag then (debug_endline "NONUNIFIABLE");
               None
             )
           )
@@ -325,7 +326,7 @@ let rec instgen (s: instgen_state) (assignments: Propositional.assignment) : boo
   *)
 let main_loop (l: int clauseset) : bool = 
   let designated : int = 
-    list_functions_clauseset l
+    Clauseset.list_functions l
     |> List.filter (function (_,0) -> true | _ -> false)
     |> List.group compare
     |> List.min_max ~cmp:(fun x y -> compare (List.length x) (List.length y)) |> snd 

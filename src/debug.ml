@@ -11,6 +11,8 @@ let debug_int     x = prerr_int     x (* (Lazy.force x)  *)
 
 let debug_printf = Printf.eprintf
 
+let debug_out = stderr
+
 (* OR *)
 
 (* [%%define debug false]

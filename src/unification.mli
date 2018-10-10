@@ -12,4 +12,4 @@ val mgu_map : 'a term * 'a term -> ('a, 'a term) BatMap.t
 val mgu_list_map : ('a term * 'a term) list -> ('a, 'a term) BatMap.t
 (** Like mgu_list, but returns a map instead of a term *)
 
-val map_to_func : ('a, 'a term) BatMap.t -> ('a -> 'a term) 
+(* val map_to_func : ('a, 'a term) BatMap.t -> ('a -> 'a term)  *)

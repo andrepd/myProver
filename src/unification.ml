@@ -1,10 +1,9 @@
-open Types
 open Batteries
 
-type 'a subst = ('a, 'a term) Map.t
+open Types
+open Util
 
-let map_to_func (env: 'a subst) : ('a -> 'a term) = 
-  fun x -> Map.find_default (Var x) x env
+type 'a subst = 'a Subst.map
 
 let rec istriv (env: 'a subst) x t = 
   match t with
@@ -34,12 +33,12 @@ let rec unify (env: 'a subst) (eqs: ('a term * 'a term) list) : 'a subst =
       unify env' xs
 
 let rec reduce (env: 'a subst) : 'a subst = 
-  let env_func = map_to_func env in
-  let env' = Map.map (Util.subst_term env_func) env in
+  let env_func = Subst.map_to_func env in
+  let env' = Map.map (Term.subst env_func) env in
   if env' = env then env else reduce env'
 
 let mgu_list x = 
-  (reduce @@ unify Map.empty x) |> map_to_func
+  (reduce @@ unify Map.empty x) |> Subst.map_to_func
 
 let mgu x = mgu_list @@ List.singleton x
 
