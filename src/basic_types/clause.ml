@@ -116,14 +116,17 @@ let encode table num (clause: 'a clause) : int clause =
 
 
 
-let print_tptp ~name ~role inner out x = 
+let print_tptp ~name ~role inner ~is_infix out x = 
   Printf.fprintf out "cnf(%s,%s,\n" name role;
   List.print
     ~first:  "  ( "
     ~sep:  "\n  | "
     ~last: "\n  )\n"
-    (Literal.print_tptp inner) out x;
-  IO.nwrite out ")"
+    (Literal.print_tptp inner ~is_infix) out x;
+  IO.nwrite out ")."
+
+let print_tptp_string =
+  print_tptp ~is_infix:(fun x -> x = "=")
 
 let validate_tptp inner x =
   List.for_all (Literal.validate_tptp inner) x

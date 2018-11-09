@@ -42,20 +42,12 @@ let list_vars x =
 
 
 let rec print_tptp inner out x =
-  let valid_functional_ident x = 
-    not (String.is_empty x) && Char.is_lowercase x.[0]
-  in
-  
   match x with
-  | Pred (name, args) -> (
-    (* let name = IO.to_string inner name in
-    if not (valid_functional_ident name) then
-      failwith @@ Printf.sprintf "invalid func identifier `%s`" name; *)
+  | Pred (name, []) -> 
+    (inner out name;)
+  | Pred (name, args) ->
     inner out name;
-    IO.write out '(';
-    List.print ~first:"" ~last:"" ~sep:"," (Term.print_tptp inner) out args;  (* can optimise *)
-    IO.write out ')';
-  )
+    List.print ~first:"(" ~last:")" ~sep:"," (Term.print_tptp inner) out args  (* can optimise *)
 
 let validate_tptp inner x =
   let valid_functional_ident x = 
@@ -68,7 +60,6 @@ let validate_tptp inner x =
   in
 
   match x with
-  | Pred (name, args) -> (
+  | Pred (name, args) ->
     (aux inner name |> valid_functional_ident)
     && List.Labels.for_all (Term.validate_tptp inner) args
-  )

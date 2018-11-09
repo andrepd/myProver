@@ -12,7 +12,7 @@ val print :
   'b t -> 
   unit
 
-val print_tptp : ('a, 'b) BatIO.printer -> 'b BatIO.output -> 'a t -> unit
+val print_tptp : ('a, 'b) BatIO.printer -> is_infix:('a -> bool) -> 'b BatIO.output -> 'a t -> unit
 
 (** Apply a substitution (mapping of variables to terms) to a literal*)
 val subst : ('a -> 'a Term.t) -> 'a t -> 'a t 

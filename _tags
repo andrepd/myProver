@@ -1,3 +1,5 @@
 true: package(batteries, angstrom, stdlib)
 
 "src": traverse
+"src": include
+"src/basic_types": include
